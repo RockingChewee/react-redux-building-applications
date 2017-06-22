@@ -1,0 +1,12 @@
+1. Intro
+===================
+* ES6 with Babel and Webpack has become a de-facto way to build the React applications.
+* Redux created at 2015 had become a de facto Flux implementation.
+* Why Redux?
+  - One Store
+  - Reduced Boilerplate
+  - Isomorphic/Universal Friendly
+  - Immutable Store
+  - Hot Reloading
+  - Time-travel debugging
+  - Small
