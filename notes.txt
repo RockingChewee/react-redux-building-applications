@@ -10,3 +10,421 @@
   - Hot Reloading
   - Time-travel debugging
   - Small
+
+
+
+2. Environment Setup
+===================
+* Resources:
+  - The official react starter kit by Cory House, called React Slingshot: https://github.com/coryhouse/react-slingshot
+  - The environment setup resources for this course, a simplified version: https://github.com/coryhouse/pluralsight-redux-starter
+* Target - do all of the following in one command:
+  - Automated Testing (Mocha)
+  - Linting (ESLint)
+  - Minification (webpack)
+  - Bundling (webpack)
+  - JSX compilation (reactify)
+  - ES6 transpilation (Babel)
+  - Serving the app (Express)
+  - Tying all together (npm scripts)
+* Transpiling:
+  - Having Babel transpiling ES6 to ES5, the Polyfills are used when some ES6 features can't be simply transpiled, e.g. array.from, set, map, promise, generators, etc.
+    Babel-polyfill can polyfill all these features so that ES6 can be safely used. It is used in this course for simplicity, however, it weights a lot and the better
+    alternative is to go after the individual polyfills required by the application and most of those are available as an individual npm packages.
+* Hot Reloading:
+  - There are multiple ways to handle hot reloading, which is likely change in the future, and this course will use babel-preset-react-hmre.
+    The babel-preset-react-hmre wraps a number of other libraries and settings in a single preset that's easy to set up.
+    It works by wrapping your components in a custom proxy using Babel. The proxies are classes that act just like your classes,
+    but they provide hooks for injecting new implementations, so that when you hit save, your changes are applied without requiring a reload.
+    Bottom line is that we are going to install babel-preset-react-hmre npm package and put a reference to it in .babelrc.
+  - Warning:
+    ~ Hot reloading is still experimental. There are likely to be better ways to handle this in the future.
+    ~ Doesn't hot reload Functional components, unless there is a Class somewhere up hierarchy tree (there usually is).
+    ~ Doesn't hot reload Container functions, like mapStateToProps.
+    ~ Other options exist - React Hot Loader 3.0 is in alpha currently and it addresses those downsides. This will be the recommended approach.
+* Versions:
+  - Node 6.10 (can run multiple versions of node via nvm-windows)
+  - React 15.0.2
+  - Redux 3.5.2
+  - React-router 2.4.0
+  - Webpack 1.13
+  - Babel 6.*
+* Editors:
+  - Webstorm - best ES6 support, powerful refactoring tools, autocompletion, etc.
+  - Atom with 'react' (language support, indentation, snippets, auto completion, reformatting) and 'terminal-plus' (integrated terminal) packages
+* Build:
+  - npm scripts instead of Grunt or Gulp - bit.ly/npmvsgulp
+* webpack.config.dev.js configuration options:
+  - debug - enables displaying the debug informaiton.
+  - devtool - a way to map the minified code sent to browser to the source code that is also sent along, so that the front-end debugging is comfortable.
+  - noInfo - enables displaying the list of files the webpack is bundling.
+  - entry - an array of entry points for development, which is a good way to inject middleware for things like hot reloading.
+  - target - the target execution environment type, which is used by bundler in order to bundle the code correctly.
+  - output - specifies where the webpack whould create our dev bundle. Webpack isn't actually going to generate any physical files, but will create bundles in memory.
+             We need this option to simulate the physical file's existence and have something to refer to in index.html for example.
+             The real physical files will be created during the production build though.
+  - devServer - mainly it specifies where are the source files that are to be bundled and served.
+  - plugins - enabling additional webpack capabilities.
+  - module - tells webpack what kind of file types it should handle. We could handle SaaS and LESS here also.
+* .eslintrc configuration options:
+  - extends - usually is extending eslint recommended settings as a baseline and augmenting them with plugins for enhanced linting for ES6 imports.
+  - plugins - here we will use the React plugin to add a number of useful React-specific linting rules (prefixed with 'react/').
+  - rules - linting rule preferences. 0 - off, 1 - warning, 2 - error (breaks the build).
+  - parserOptions - enables ES6 and JSX.
+  - env - declares the environments eslint should be aware of, i.e. to expect certain global variables.
+* npm commands
+  >npm install
+  >npm start -s
+
+
+.editorconfig
+----
+# editorconfig.org
+root = true
+
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+
+.eslintrc
+----
+{
+  "extends": [
+    "eslint:recommended",
+    "plugin:import/errors",
+    "plugin:import/warnings"
+  ],
+  "plugins": [
+    "react"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 6,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "env": {
+    "es6": true,
+    "browser": true,
+    "node": true,
+    "jquery": true,
+    "mocha": true
+  },
+  "rules": {
+    "quotes": 0,
+    "no-console": 1,
+    "no-debugger": 1,
+    "no-var": 1,
+    "semi": [1, "always"],
+    "no-trailing-spaces": 0,
+    "eol-last": 0,
+    "no-unused-vars": 0,
+    "no-underscore-dangle": 0,
+    "no-alert": 0,
+    "no-lone-blocks": 0,
+    "jsx-quotes": 1,
+    "react/display-name": [ 1, {"ignoreTranspilerName": false }],
+    "react/forbid-prop-types": [1, {"forbid": ["any"]}],
+    "react/jsx-boolean-value": 1,
+    "react/jsx-closing-bracket-location": 0,
+    "react/jsx-curly-spacing": 1,
+    "react/jsx-indent-props": 0,
+    "react/jsx-key": 1,
+    "react/jsx-max-props-per-line": 0,
+    "react/jsx-no-bind": 1,
+    "react/jsx-no-duplicate-props": 1,
+    "react/jsx-no-literals": 0,
+    "react/jsx-no-undef": 1,
+    "react/jsx-pascal-case": 1,
+    "react/jsx-sort-prop-types": 0,
+    "react/jsx-sort-props": 0,
+    "react/jsx-uses-react": 1,
+    "react/jsx-uses-vars": 1,
+    "react/no-danger": 1,
+    "react/no-did-mount-set-state": 1,
+    "react/no-did-update-set-state": 1,
+    "react/no-direct-mutation-state": 1,
+    "react/no-multi-comp": 1,
+    "react/no-set-state": 0,
+    "react/no-unknown-property": 1,
+    "react/prefer-es6-class": 1,
+    "react/prop-types": 1,
+    "react/react-in-jsx-scope": 1,
+    "react/require-extension": 1,
+    "react/self-closing-comp": 1,
+    "react/sort-comp": 1,
+    "react/wrap-multilines": 1
+  }
+}
+
+
+package.json
+----
+{
+  "name": "react-redux-building-applications",
+  "version": "1.0.0",
+  "description": "Starter kit for React and Redux Pluralsight course by Cory House",
+  "scripts": {
+    "prestart": "babel-node tools/startMessage.js",
+    "start": "npm-run-all --parallel test:watch open:src lint:watch",
+    "open:src": "babel-node tools/srcServer.js",
+    "lint": "node_modules/.bin/esw webpack.config.* src tools",
+    "lint:watch": "npm run lint -- --watch",
+    "test": "mocha --reporter progress tools/testSetup.js \"src/**/*.test.js\"",
+    "test:watch": "npm run test -- --watch"
+  },
+  "author": "Aleksandr Fokin",
+  "license": "MIT",
+  "dependencies": {
+    "babel-polyfill": "6.8.0",
+    "bootstrap": "3.3.6",
+    "jquery": "2.2.3",
+    "react": "15.0.2",
+    "react-dom": "15.0.2",
+    "react-redux": "4.4.5",
+    "react-router": "2.4.0",
+    "react-router-redux": "4.0.4",
+    "redux": "3.5.2",
+    "redux-thunk": "2.0.1",
+    "toastr": "2.1.2"
+  },
+  "devDependencies": {
+    "babel-cli": "6.8.0",
+    "babel-core": "6.8.0",
+    "babel-loader": "6.2.4",
+    "babel-plugin-react-display-name": "2.0.0",
+    "babel-preset-es2015": "6.6.0",
+    "babel-preset-react": "6.5.0",
+    "babel-preset-react-hmre": "1.1.1",
+    "babel-register": "6.8.0",
+    "cheerio": "0.22.0",
+    "colors": "1.1.2",
+    "compression": "1.6.1",
+    "cross-env": "1.0.7",
+    "css-loader": "0.23.1",
+    "enzyme": "2.2.0",
+    "eslint": "2.9.0",
+    "eslint-plugin-import": "1.6.1",
+    "eslint-plugin-react": "5.0.1",
+    "eslint-watch": "2.1.11",
+    "eventsource-polyfill": "0.9.6",
+    "expect": "1.19.0",
+    "express": "4.13.4",
+    "extract-text-webpack-plugin": "1.0.1",
+    "file-loader": "0.8.5",
+    "jsdom": "8.5.0",
+    "mocha": "2.4.5",
+    "nock": "8.0.0",
+    "npm-run-all": "1.8.0",
+    "open": "0.0.5",
+    "react-addons-test-utils": "15.0.2",
+    "redux-immutable-state-invariant": "1.2.3",
+    "redux-mock-store": "1.0.2",
+    "rimraf": "2.5.2",
+    "style-loader": "0.13.1",
+    "url-loader": "0.5.7",
+    "webpack": "1.13.0",
+    "webpack-dev-middleware": "1.6.1",
+    "webpack-hot-middleware": "2.10.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RockingChewee/react-redux-building-applications"
+  }
+}
+
+
+webpack.config.dev.js
+----
+import webpack from 'webpack';
+import path from 'path';
+
+export default {
+  debug: true,
+  devtool: 'inline-source-map',
+  noInfo: false,
+  entry: [
+    'eventsource-polyfill', // necessary for hot reloading with IE
+    'webpack-hot-middleware/client?reload=true', //note that it reloads the page if hot module reloading fails.
+    path.resolve(__dirname, 'src/index') // our application's actual entry point, has to be last
+  ],
+  target: 'web',
+  output: {
+    path: __dirname + '/dist', // Note: Physical files are only output by the production build task `npm run build`.
+    publicPath: '/',
+    filename: 'bundle.js'
+  },
+  devServer: {
+    contentBase: path.resolve(__dirname, 'src')
+  },
+  plugins: [
+    new webpack.HotModuleReplacementPlugin(), // enables to hot-replace modules without a full browser refresh
+    new webpack.NoErrorsPlugin() // keeps errors from breaking our hot reloading experience
+  ],
+  module: {
+    loaders: [
+      {test: /\.js$/, include: path.join(__dirname, 'src'), loaders: ['babel']},
+      {test: /(\.css)$/, loaders: ['style', 'css']}, // we could tell webpack to handle SaaS and LESS files here also
+      {test: /\.eot(\?v=\d+\.\d+\.\d+)?$/, loader: 'file'}, // the following 4 instructions are necessary for the file types Bootstrap utilizes for fonts
+      {test: /\.(woff|woff2)$/, loader: 'url?prefix=font/&limit=5000'},
+      {test: /\.ttf(\?v=\d+\.\d+\.\d+)?$/, loader: 'url?limit=10000&mimetype=application/octet-stream'},
+      {test: /\.svg(\?v=\d+\.\d+\.\d+)?$/, loader: 'url?limit=10000&mimetype=image/svg+xml'}
+    ]
+  }
+};
+
+
+.babelrc - all the mentioned presents were installed as npm modules (es2015, react, react-hmre)
+----
+{
+  "presets": ["react", "es2015"],
+  "env": {
+    "development": {
+      "presets": ["react-hmre"]
+    }
+  }
+}
+
+
+tools/srcServer.js
+----
+import express from 'express';
+import webpack from 'webpack';
+import path from 'path';
+import config from '../webpack.config.dev';
+import open from 'open';
+
+/* eslint-disable no-console */
+
+const port = 3000;
+const app = express(); // creating instance of express
+const compiler = webpack(config); // getting a compiled webpack config
+
+app.use(require('webpack-dev-middleware')(compiler, {
+  noInfo: true,
+  publicPath: config.output.publicPath
+}));
+
+app.use(require('webpack-hot-middleware')(compiler));
+
+app.get('*', function(req, res) { // since this is a one page app, we are serving index.html for all requests
+  res.sendFile(path.join( __dirname, '../src/index.html'));
+});
+
+app.listen(port, function(err) {
+  if (err) {
+    console.log(err);
+  } else {
+    open(`http://localhost:${port}`);
+  }
+});
+
+
+tools/startMessage.js
+----
+import colors from 'colors';
+
+/* eslint-disable no-console */
+
+console.log('Starting app in dev mode...'.green);
+
+
+tools/testSetup.js
+----
+// This file is written in ES5 since it's not transpiled by Babel.
+// This file does the following:
+// 1. Sets Node environment variable
+// 2. Registers babel for transpiling our code for testing
+// 3. Disables Webpack-specific features that Mocha doesn't understand.
+// 4. Requires jsdom so we can test via an in-memory DOM in Node
+// 5. Sets up global vars that mimic a browser.
+
+/* eslint-disable no-var*/
+
+/* This setting assures the .babelrc dev config (which includes
+ hot module reloading code) doesn't apply for tests.
+ But also, we don't want to set it to production here for
+ two reasons:
+ 1. You won't see any PropType validation warnings when
+ code is running in prod mode.
+ 2. Tests will not display detailed error messages
+ when running against production version code
+ */
+process.env.NODE_ENV = 'test';
+
+// Register babel so that it will transpile ES6 to ES5
+// before our tests run.
+require('babel-register')();
+
+// Disable webpack-specific features for tests since
+// Mocha doesn't know what to do with them.
+require.extensions['.css'] = function () {return null;};
+require.extensions['.png'] = function () {return null;};
+require.extensions['.jpg'] = function () {return null;};
+
+// Configure JSDOM and set global variables
+// to simulate a browser environment for tests.
+var jsdom = require('jsdom').jsdom;
+
+var exposedProperties = ['window', 'navigator', 'document'];
+
+global.document = jsdom('');
+global.window = document.defaultView;
+Object.keys(document.defaultView).forEach((property) => {
+  if (typeof global[property] === 'undefined') {
+    exposedProperties.push(property);
+    global[property] = document.defaultView[property];
+  }
+});
+
+global.navigator = {
+  userAgent: 'node.js'
+};
+
+documentRef = document;  //eslint-disable-line no-undef
+
+
+src/index.html
+----
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Pluralsight Admin</title>
+  </head>
+  <body>
+    <h1>React and Redux in ES6 on Pluralsight</h1>
+    <div id="app"></div>
+    <script src="/bundle.js"></script>
+  </body>
+</html>
+
+
+src/index.js
+----
+/* eslint-disable no-console */
+console.log('hi');
+
+
+src/index.test.js
+----
+import expect from 'expect';
+
+describe('Our first test', () => {
+  it('should pass', () => {
+    expect(true).toEqual(true);
+  });
+});
+
+
+
+3. React Component Approaches
+===================
