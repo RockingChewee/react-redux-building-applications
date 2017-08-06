@@ -59,6 +59,7 @@
   - devtool - a way to map the minified code sent to browser to the source code that is also sent along, so that the front-end debugging is comfortable.
   - noInfo - enables displaying the list of files the webpack is bundling.
   - entry - an array of entry points for development, which is a good way to inject middleware for things like hot reloading.
+            The order is critical and an entry point for our app comes last.
   - target - the target execution environment type, which is used by bundler in order to bundle the code correctly.
   - output - specifies where the webpack whould create our dev bundle. Webpack isn't actually going to generate any physical files, but will create bundles in memory.
              We need this option to simulate the physical file's existence and have something to refer to in index.html for example.
@@ -428,3 +429,156 @@ describe('Our first test', () => {
 
 3. React Component Approaches
 ===================
+
+* React component creation Approaches
+  - ES5 createClass
+    var HelloWorld = React.createClass({
+      render: function() {
+        return (
+          <h1>Hello World</h1>
+        );
+      }
+    });
+  - ES6 class
+    class Contacts extends React.Component {
+      render() {
+        return (
+          <h1>Hello World</h1>
+        );
+      }
+    }
+  - ES5 stateless function
+    var HelloWorld = function(props) {
+      return (
+        <h1>Hello World</h1>
+      );
+    };
+  - ES6 stateless function
+    const HelloWorld = (props) => {
+      return (
+        <h1>Hello World</h1>
+      );
+    };
+  - Many more... - http://bit.ly/react-define-component
+    ~ Object.create
+    ~ Mixins
+    ~ Parasitic Components
+    ~ StampIt
+
+* Differences when creating React components in ES5 and ES6:
+
+  - React components built with ES6 classes do NOT autobind automatically:
+
+    // Works fine with ES5 createClass
+    <div onClick={this.handleClick}></div>
+
+    // Requires explicit bind with ES6 Class
+    <div onClick={this.handleClick.bind(this)}></div>
+
+    // OR for performance reasons, binding can be done in the constructor
+    class Contacts extends React.Component {
+      constructor(props) {
+        super(props);
+        this.handleClick = this.handleClick.bind(this);
+      }
+    }
+
+  - PropTypes and Default props are declared separately, below the class definition.
+
+  - setInitialState() isn't utilized in ES6 classes, but the initial state is set in constructor instead.
+
+* Benefits of stateless functional components - use whenever possible:
+  - No class needed
+  - Avoid 'this' keyword
+  - Enforced best practices - no state is handled in these components, therefore they remain pure and do not allow introducing of quick hacks.
+  - High signal-to-noise ration - less code
+  - Enhanced code completion / intellisense - if to destructure props in ES6 (example), then all needed data is held within a single function argument.
+  - Bloated components are obvious - the function that takes a lot of parameters is a code smell.
+  - Easier to understand - the components like that is a simple funciton that takes props and spits out HTML.
+  - Easier to test, since we know it is just a markup.
+  - Better performance - no state or lifecycle methods to worry about.
+
+* When to use React class components over stateless functional components:
+  - Use React class components when:
+    ~ State - there is a need to utilize and maintain local state.
+    ~ Refs - when it is needed to get a reference to the underlying DOM, since the stateless components don't actually create the component instance.
+    ~ Lifecycle methods - when those hooks are needed.
+    ~ Child functions - in stateless functional components each render creates a new instance of the nested function, which hurts the performance.
+  - Use React stateless functional components:
+    ~ Everywhere else.
+
+* Container vs Presentational components:
+  - Container components (also known as Smart, Stateful, Controller View):
+    ~ have most of the smarts and least of the markup. These components can be thought of as a back-end for the front-end.
+    ~ are primarily concerned with passing data and actions down to their children, usually presentation components.
+    ~ have a Redux-specific code inside for dispatching actions to the store and connecting to the store via connect.
+    ~ are usually stateful.
+  - Presentation components (also known as Dumb, Stateless, View):
+    ~ are nearly all markup with little to none logic inside.
+    ~ receive data and actions they need from a container component via props.
+    ~ typically know nothing about Redux.
+    ~ are typically stateless.
+
+* Nested Container components:
+  A quote from Dan Abramov (creator of Redux)when trying to decide whether to create Container or Presentational component:
+  "When you notice that some components don't use props they receive but merely forward them down, it's a good time to introduce some container components."
+  This is supposed to be a criteria to create nested Container components, which is normally avoided for performance reasons.
+
+
+ES6 class example:
+----
+import React from 'react';
+class HelloWorld extends React.Component {
+  constructor(props) {
+    super(props);
+  }
+  sayHi(event) {
+    alert(`Hi ${this.props.name}`);
+  }
+  render() {
+    return (
+      <div>
+        <a href="#" onClick={this.sayHi.bind(this)}>Say Hi</a>
+      </div>
+    );
+  }
+}
+HelloWorld.propTypes = {
+  name: React.PropTypes.string.isRequired
+};
+export default HelloWorld;
+
+
+ES6 stateless functional component example
+----
+import React from 'react';
+const HelloWorld = (props) => {
+  const sayHi = (event) => {
+    alert(`Hi ${props.name}`);
+  }
+  return (
+    <div>
+      <a href="#" onClick={sayHi}>Say Hi</a>
+    </div>
+  );
+}
+HelloWorld.propTypes = {
+  name: React.PropTypes.string.isRequired
+};
+export default HelloWorld;
+
+
+
+4. Initial App Structure
+===================
+
+
+
+
+Appendix: ES6
+===================
+
+* 'var' is to be avoided, but 'let' and 'const' are to be used.
+  'const' is more strict and doesn't allow the variable to be reassigned a different value.
+
+* The arrow function syntax '(...) => { ... }' is used insted of traditional 'function(...) { ... }' syntax and it is a matter of taste.
