@@ -571,6 +571,193 @@ export default HelloWorld;
 
 4. Initial App Structure
 ===================
+* Purpose of this module is to create app foundation:
+  - Create first pages
+  - Create layout
+  - Configure routing
+  - Setup navigation
+
+* Hot-reloading:
+  - The src/components/about/AboutPage.js could totally be a functional stateless component, however, currently there is a limitation with hot-reloading,
+    which doesn't work unless somewhere at the top of the components hierarchy there is a class component.
+  - HTML files are also NOT a part of the hot-reloading lifecycle.
+
+
+src/components/about/AboutPage.js
+----
+import React from 'react';
+
+class AboutPage extends React.Component {
+  render() {
+    return (
+      <div>
+        <h1>About</h1>
+        <p>This application uses React, Redux, React Router and a variety of other helpful libraries.</p>
+      </div>
+    );
+  }
+}
+
+export default AboutPage;
+
+
+src/components/home/HomePage.js
+----
+import React from 'react';
+import {Link} from 'react-router';
+
+class HomePage extends React.Component {
+  render() {
+    return (
+      <div className="jumbotron">
+        <h1>Pluralsight Administration</h1>
+        <p>React, Redux and React Router in ES6 for ultra-responsive web apps.</p>
+        <Link to="about" className="btn btn-primary btn-lg">Learn more</Link>
+      </div>
+    );
+  }
+}
+
+export default HomePage;
+
+
+src/components/App.js
+----
+// This component handles the App template used on every page.
+import React, {PropTypes} from 'react';
+import Header from './common/Header';
+
+class App extends React.Component {
+  render() {
+    return (
+      <div className="container-fluid">
+        <Header/>
+        {/* These "children" (e.g. AboutPage, HomePage, etc.) will be passed over from the react-router
+            to App component (in routes.js) and then they will be composed right here on the page. */}
+        {this.props.children}
+      </div>
+    );
+  }
+}
+
+App.propTypes = {
+  children: PropTypes.object.isRequired
+};
+
+export default App;
+
+
+src/routes.js
+----
+import React from 'react';
+import { Route, IndexRoute } from 'react-router';
+import App from './components/App';
+import HomePage from './components/home/HomePage';
+import AboutPage from './components/about/AboutPage';
+import CoursesPage from './components/course/CoursesPage';
+
+export default (
+  /* Always load the App component and then pass the nested items as "children" to the App based on the routing. */
+  <Route path="/" component={App}>
+    {/* If someone goes to /, we will load the HomePage. */}
+    <IndexRoute component={HomePage} />
+    <Route path="courses" component={CoursesPage} />
+    <Route path="about" component={AboutPage} />
+  </Route>
+);
+
+
+src/index.js
+----
+import 'babel-polyfill';
+import React from 'react';
+import { render } from 'react-dom';
+import { Router, browserHistory } from 'react-router';
+import routes from './routes';
+import './styles/styles.css'; //Webpack can import CSS files too!
+import '../node_modules/bootstrap/dist/css/bootstrap.min.css';
+
+render(
+  <Router history={browserHistory} routes={routes} />,
+  document.getElementById('app')
+);
+
+
+src/styles/styles.css
+----
+/* Styles */
+#app {
+  font: 14px 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: #4d4d4d;
+  min-width: 550px;
+  max-width: 850px;
+  margin: 0 auto;
+}
+
+a.active {
+  color: orange;
+}
+
+nav {
+  padding-top: 20px;
+}
+
+
+src/index.html
+----
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Pluralsight Admin</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="/bundle.js"></script>
+  </body>
+</html>
+
+
+src/components/common/Header.js
+----
+import React, {PropTypes} from 'react';
+import { Link, IndexLink } from 'react-router';
+
+const Header = () => {
+  return (
+    <nav>
+      {/* The class value of activeClassName styles the currently selected anchor accordingly. */}
+      <IndexLink to="/" activeClassName="active">Home</IndexLink>
+      {" | "}
+      <Link to="/courses" activeClassName="active">Courses</Link>
+      {" | "}
+      <Link to="/about" activeClassName="active">About</Link>
+    </nav>
+  );
+};
+
+export default Header;
+
+
+src/components/course/CoursesPage.js
+----
+import React, {PropTypes} from 'react';
+
+class CoursesPage extends React.Component {
+  render() {
+    return (
+      <div>
+        <h1>Courses</h1>
+      </div>
+    );
+  }
+}
+
+export default CoursesPage;
+
+
+
+5. Intro to Redux
+===================
 
 
 
