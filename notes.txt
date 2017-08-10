@@ -793,8 +793,8 @@ export default CoursesPage;
     When Actions are triggered, Stores are notified by Dispatcher (singleton). Stores are explicitly connected to Dispatcher via EventEmitter.
 
   - Redux flow: ----- React component ----> Action ----> Store ----> Reducers ----> Store ----> React component ------->
-    ~ Action - an object with a type and some data. {type: RATE_COURSE, rating: 5}
-    ~ Instead of a Dispatcher, Redux relies on pure functions called Reducers, which handle Actions:
+    ~ Action - an object with a 'type' and some data. {type: RATE_COURSE, rating: 5}
+    ~ Reducer - instead of a Dispatcher, Redux relies on pure functions called Reducers, which handle Actions:
       function appReducer(state = defaultState, action) {
         switch (action.type) {
           case RATE_COURSE:
@@ -809,6 +809,96 @@ export default CoursesPage;
 
 6. Actions, Store and Reducers
 ===================
+* Actions
+  - Action Creator example:
+    rateCourse(rating) {
+      return { type: RATE_COURSE, rating: 5 };
+    }
+  - Action Creators are typically named after the Actions they create, e.g. the name of the Action Creator for the RATE_COURSE action is 'rateCourse'.
+  - An Action must have 'type' property and the rest of its shape is up to the developer.
+  - A 'rating' property could be anything that is serializable to JSON, i.e. a complex object, simple number, boolean, etc.
+    The only thing 'rating' couldn't be is a function or a Promise.
+
+* Store
+  - In Redux, Store is created by calling createStore in the application's entry point:
+    let store = createStore(reducer);
+  - Unlike in Flux, in Redux Stores only Store data and the logic to manipulate the data is specifed in Reducers.
+  - Having a single Store (single source of truth) makes the application easier to manage and understand.
+  - Redux Store API is very simple, i.e. the Store can:
+    ~ store.dispatch(action)
+    ~ store.subscrbe(listener)
+    ~ store.getState()
+    ~ replaceReducer(nextReducer) - is useful to support hot-reloading
+  - There is no API for changing data in the Store. Only Actions can change state via Reducers.
+
+* Mutability & Immutability
+  - Mutability
+     ~ JavaScript types: Objects, Arrays, Functions
+     ~ Example:
+       state = {
+         name: 'Cory House',
+         role: 'author'
+       }
+       state.role = 'admin';
+       return state;
+  - Immutability
+    ~ JavaScript types: Number, String, Boolean, Undefined, null
+    ~ Example:
+      state = {
+        name: 'Cory House',
+        role: 'author'
+      }
+      return state = {
+        name: 'Cory House',
+        role: 'admin'
+      };
+
+* Why is state made immutable in Redux:
+  - Clarity - when state is updated, it is clear that it was done by a Reducer.
+  - Performance - to know if the state has changed, instead of checking the individual properties, it is more efficient to check state like this:
+                  if (prevStoreState !== storeState) { ... }
+                  This comparison is used to determine when to notify React components of the state changes to trigger shouldComponentUpdate().
+  - Amazing Debugging - a powerful way to see how the application state is changing over time:
+                        Time-travel debugging, Undo/Redo, Turn off individual Actions, Play interactions back.
+
+* Ways to handling immutability (cloning):
+  - ES6: Object.assign, Spread operator
+  - ES5: Lodash merge, Lodash extend, Object-assign npm package
+  - Libraries: react-addons-update, Immutable.js
+
+* Three different approaches to enforce immutability:
+  - Trust your team - hope that everyone remembers to keep state immutable.
+  - Install 'redux-immutable-state-invariant' and use it in your Store file - use only in development!!!
+  - Use Immutable.js
+
+* Reducers
+  - To change the Store, the Action is dispatched that is ultimately handled by a Reducer.
+  - Reducers take state and an Action and return a new state:
+    function myReducer(state, action) { // OR alternatively in ES6: (state, action) => state
+      switch (action.type) {
+        case 'INCREMENT_COUNTER':
+          return Object.assign({}, state, {counter: state.counter + 1}); // returns new state based on action passed
+      }
+    }
+  - Reducers must be pure funcitons and produce no side effects - calling it with the same arguments always returns the same predictable value.
+  - Forbidden in Reducers:
+    ~ Mutate arguments
+    ~ Perform side effects, like API calls and routing transitions
+    ~ Call non-pure functions, like date.now() or math.random()
+  - Reducers can be nested:
+    In Flux there can be multiple Stores, each one holding a different area of domain data. The downside is that one store needs to wait before
+    the other one updates. This isn't necessary in Redux because the separation between data domains is achieved by splitting a single reducer
+    into multiple smaller ones. It is technically possible to create multiple Stores in Redux, but it is not recommended and only useful rarely.
+  - All Reducers are called on EACH dispatch - it is important for the Reducers to return the untouched state if no switch case matched.
+    Each Reducer only handles its slice of state.
+  - Redux FAQ: "Write independent small reducer functions that are each responsible for updates to a specific slice of state.
+    We call this pattern "reducer composition". A given action could be handled by all, some, or none of them."
+    In other there shouldn't always be a 1:1 mapping between Reducers and Actions.
+
+
+
+7. Connecting React to Redux
+===================
 
 
 
@@ -820,3 +910,13 @@ Appendix: ES6
   'const' is more strict and doesn't allow the variable to be reassigned a different value.
 
 * The arrow function syntax '(...) => { ... }' is used insted of traditional 'function(...) { ... }' syntax and it is a matter of taste.
+
+* A new approach to clone an object in JavaScript is to use Object.assign().
+  This method creates a new object, but allows to specify existing objects as a template.
+  Signature: Object.assign(target, ...sources)
+  Example:   Object.assign({}, state, {role: 'admin'});
+  A new object is created '{}', then it is mixed with the 'state' object and then with the anonymous object, which changes the 'role' property.
+  It is important for the 1st parameter to be an empty object, as otherwise the 'state' would be mutated.
+  Not all browsers yet support Object.assign() and Babel doesn't transpile it, so 'babel-polyfill' must be included at the root of the app (index.js).
+
+* Spread operator (...)
