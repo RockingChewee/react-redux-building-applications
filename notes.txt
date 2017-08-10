@@ -759,6 +759,57 @@ export default CoursesPage;
 5. Intro to Redux
 ===================
 
+* Simple setup ------------ Vanilla JS --- jQuery --- React --- React + Redux ----------> Complex setup
+
+* When to use Redux:
+  - Complex data flows, i.e. not for static data
+  - Inter-component communication, when same data is used in two components that have no parent-child relation
+  - Application has non-hierarchical data
+  - Application offers an increasing number of actions
+
+* Typical Redux use case:
+  Given 2 React components with no parent-child relation, one of the components dispatches an Action to change the data.
+  The Centralized Store captures this Action and immediately notifies both components of the data change.
+
+* Redux: 3 core principles:
+  - Application state is placed in a single immutable store.
+  - The only way to mutate state is to emit an Action, e.g. click on a specific submit button.
+  - State is changed by pure functions, called Reducers. Reducer is a function that accepts the current state in an aciton and returns a new state.
+
+* Flux and Redux side by side comparison:
+  Flux:                                                          | Redux:
+  ---------------------------------------------------------------+----------------------------------------------------------------------------
+  Unidirectional data flow - data flows down, actions flow up    | Unidirectional data flow - data flows down, actions flow up
+  Actions - describes user intent                                | Actions - describes user intent
+  Stores contain state and change logic                          | Store contains state, but the change logic specified in Reducers
+  Multiple Stores                                                | Single Store
+  Flat and disconnected multiple Stores                          | Single Store with hierarchical (nested) Reducers
+  Singleton Dispatcher in a center of an application             | No Dispatcher, where Actions are passed down to the Reducers directly
+  React components subscribe to Stores (OnChange & EventEmitter) | Container components utilize connect method of React-Redux library
+  State is manipulated directly, i.e. it is mutable              | State is immutable, i.e. a copy of new State is returned from Reducers
+
+* Flux vs Redux flows:
+  - Flux flow: ------ React component ----> Action ----> Dispatcher ----> Store ----> React component ------->
+    When Actions are triggered, Stores are notified by Dispatcher (singleton). Stores are explicitly connected to Dispatcher via EventEmitter.
+
+  - Redux flow: ----- React component ----> Action ----> Store ----> Reducers ----> Store ----> React component ------->
+    ~ Action - an object with a type and some data. {type: RATE_COURSE, rating: 5}
+    ~ Instead of a Dispatcher, Redux relies on pure functions called Reducers, which handle Actions:
+      function appReducer(state = defaultState, action) {
+        switch (action.type) {
+          case RATE_COURSE:
+          // return new state
+        }
+      }
+    ~ Store - updated once the new state is returned from a Reducer. Since Stores are immutable in Redux, the Reducers return a new update copy of a
+              state, which updates the Store.
+    ~ React component - connected to the Store using React-Redux lib.
+
+
+
+6. Actions, Store and Reducers
+===================
+
 
 
 
