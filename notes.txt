@@ -479,6 +479,8 @@ describe('Our first test', () => {
     class Contacts extends React.Component {
       constructor(props) {
         super(props);
+        // Need to change 'this' context of change handlers, as otherwise the 'this' context
+        // of an input element is picked, where this.state doesn't exist
         this.handleClick = this.handleClick.bind(this);
       }
     }
@@ -910,7 +912,7 @@ export default CoursesPage;
     ~ attaches application to the store
     ~ makes the store available to all container components in the application without having to pass it explicitly
     ~ example:
-      <Provider store={this.props.store}>
+      <Provider store={store}>
         <App/>
       </Provider>
   - Connect function:
@@ -960,6 +962,7 @@ export default CoursesPage;
   - mapDispatchToProps()
     ~ Specifies the Actions to expose to the React component as props.
     ~ Receives 'dispatch' and returns the callback props to be passed down.
+    ~ If mapDispatchToProps is omitted in the connect() invocation, then connect() adds a 'dispatch' function as a property in this.props.
     ~ The bindActionCreators() function is a part of Redux.
     ~ 3 ways of passing Actions down to components using Redux:
 
@@ -1015,6 +1018,178 @@ export default CoursesPage;
 8. Redux Flow
 ===================
 
+* Code flow:
+  - src/actions/courseActions.js - createCourse()
+  - src/reducers/courseReducer.js - case 'CREATE_COURSE'
+  - src/components/course/CoursesPage.js - mapStateToProps()
+  - src/components/course/CoursesPage.js - render()
+
+* Typical ES6 React class Container component structure review when using Redux:
+  - Constructor is used for setting the initial state and calling bind functions.
+  - Child functions that are called by render(), usually 'change' event handlers.
+  - render() function that usually calls a View component and supplies data and event handlers to it via props.
+  - Provide PropTypes below the ES6 react class declaration.
+  - Redux connect related functions - mapStateToProps() declaration, mapDispatchToProps() declaration, connect() invocation.
+
+
+src/components/course/CoursesPage.js
+----
+import React, {PropTypes} from 'react';
+import {connect} from 'react-redux';
+import {bindActionCreators} from 'redux';
+import * as courseActions from '../../actions/courseActions';
+
+class CoursesPage extends React.Component {
+
+  constructor(props, context) {
+    super(props, context);
+    this.state = {
+      course: { title: '' }
+    };
+    // Need to change 'this' context of change handlers, as otherwise the 'this' context
+    // of an input element is picked, where this.state doesn't exist
+    this.onTitleChange = this.onTitleChange.bind(this);
+    this.onClickSave = this.onClickSave.bind(this);
+  }
+
+  onTitleChange(event) {
+    const course = this.state.course;
+    course.title = event.target.value;
+    this.setState({course: course});
+  }
+
+  onClickSave() {
+    this.props.actions.createCourse(this.state.course);
+  }
+
+  courseRow(course, index) {
+    return <div key={index}>{course.title}</div>;
+  }
+
+  render() {
+    return (
+      <div>
+        <h1>Courses</h1>
+        {this.props.courses.map(this.courseRow)}
+        <h2>Add Course</h2>
+        <input
+          type="text"
+          onChange={this.onTitleChange}
+          value={this.state.course.title} />
+        <input
+          type="submit"
+          value="Save"
+          onClick={this.onClickSave} />
+      </div>
+    );
+  }
+}
+
+CoursesPage.propTypes = {
+  courses: PropTypes.array.isRequired,
+  actions: PropTypes.object.isRequired
+};
+
+function mapStateToProps(state, ownProps) {
+  return {
+    courses: state.courses // the name 'courses' of state depends on how the courseReducer is referenced to in rootReducer, i.e. src/reducers/index.js
+  };
+}
+
+function mapDispatchToProps(dispatch) {
+  return {
+    actions: bindActionCreators(courseActions, dispatch)
+  };
+}
+
+// connect(mapStateToProps, mapDispatchToProps) returns a function, which is invoked with CoursesPage argument
+export default connect(mapStateToProps, mapDispatchToProps)(CoursesPage);
+
+
+src/actions/courseActions.js
+----
+import * as types from './actionTypes';
+
+export function createCourse(course) {
+  return { type: types.CREATE_COURSE, course }; // in ES5 the Object declaration would look like { type: 'CREATE_COURSE', course: course }
+}
+
+
+src/reducers/courseReducer.js
+----
+import * as types from '../actions/actionTypes';
+
+export default function courseReducer(state = [], action) { // this slice of 'state' will be an array of courses
+  switch (action.type) {
+    case types.CREATE_COURSE:
+      // all the 'state' array elements are picked and defined here inline, which returns a new instance of 'state' array
+      // and a new array element is added to the end
+      return [...state, Object.assign({}, action.course)];
+    default:
+      return state;
+  }
+}
+
+
+src/reducers/index.js
+----
+import {combineReducers} from 'redux';
+import courses from './courseReducer';
+
+const rootReducer = combineReducers({
+  courses // in ES5 this would look like courses: courses; by this name this reducer will be reachable, i.e. this.state.courses
+});
+
+export default rootReducer;
+
+
+src/store/configureStore.js
+----
+import {createStore, applyMiddleware} from 'redux';
+import rootReducer from '../reducers';
+import reduxImmutableStateInvariant from 'redux-immutable-state-invariant'; // enforces immutability
+
+export default function configureStore(initialState) {
+  return createStore(
+    rootReducer,
+    initialState,
+    applyMiddleware(reduxImmutableStateInvariant())
+  );
+}
+
+
+src/index.js
+----
+import 'babel-polyfill';
+import React from 'react';
+import { render } from 'react-dom';
+import configureStore from './store/configureStore';
+import {Provider} from 'react-redux';
+import { Router, browserHistory } from 'react-router';
+import routes from './routes';
+import './styles/styles.css'; //Webpack can import CSS files too!
+import '../node_modules/bootstrap/dist/css/bootstrap.min.css';
+
+// If we wanted to rehydrate our store with some initial state passed down from the server, we could supply it to the configureStore()
+const store = configureStore();
+
+render(
+  <Provider store={store}>
+    <Router history={browserHistory} routes={routes} />
+  </Provider>,
+  document.getElementById('app')
+);
+
+
+src/actions/actionTypes.js
+----
+export const CREATE_COURSE = 'CREATE_COURSE';
+
+
+
+9. Async in Redux
+===================
+
 
 
 
@@ -1025,6 +1200,7 @@ Appendix: ES6
   'const' is more strict and doesn't allow the variable to be reassigned a different value.
 
 * The arrow function syntax '(...) => { ... }' is used insted of traditional 'function(...) { ... }' syntax and it is a matter of taste.
+  The () can be omitted if there is only 1 parameter.
 
 * A new approach to clone an object in JavaScript is to use Object.assign().
   This method creates a new object, but allows to specify existing objects as a template.
@@ -1034,4 +1210,9 @@ Appendix: ES6
   It is important for the 1st parameter to be an empty object, as otherwise the 'state' would be mutated.
   Not all browsers yet support Object.assign() and Babel doesn't transpile it, so 'babel-polyfill' must be included at the root of the app (index.js).
 
+* Shorthand property names
+  const action = { type: 'CREATE_COURSE', course }; // in ES5 the Object declaration would look like { type: 'CREATE_COURSE', course: course }
+
 * Spread operator (...)
+  const course = {title: 'JS Dev Env', author: 'Cory House', length: '5 hrs'};
+  ...course
