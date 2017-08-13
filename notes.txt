@@ -1018,7 +1018,7 @@ export default CoursesPage;
 8. Redux Flow
 ===================
 
-* Code flow:
+* Code flow, i.e. what to code first and to what to proceed next:
   - src/actions/courseActions.js - createCourse()
   - src/reducers/courseReducer.js - case 'CREATE_COURSE'
   - src/components/course/CoursesPage.js - mapStateToProps()
@@ -1213,12 +1213,14 @@ export const CREATE_COURSE = 'CREATE_COURSE';
   Easy to learn                       | Hard to learn (generators and a large API)
 
 * Redux-thunk
-  Normally, we can only return objects from action creators, but with redux-thunk we can return a function instead.
+  Normally, we can only return objects from action creators, but with redux-thunk we return a function instead, which in turn calls another action creator.
+  So instead of dispatching an Action created via action creator, we dispatch a nested function as a callback that is being processed by the Store middleware.
+  This function calls an API and upon the response is received - dispatches another Action the regular way.
 
   export function deleteAuthor(authorId) {
-    return dispatch => { // this is a Thunk and it returns a function
+    return dispatch => { // this is a Thunk and it returns a function that is handled by the Redux store middleware afterwards
       return AuthorApi.deleteAuthor(authorId).then(() => {
-        dispatch(deleteAuthorSuccess(authorId)); // calling a regular action creator called deletedAuthor()
+        dispatch(deleteAuthorSuccess(authorId)); // calling a regular action creator called deleteAuthorSuccess() once the response is received from an API call
       }).catch(handleError);
     };
   }
@@ -1628,26 +1630,531 @@ export default CourseListRow;
 10. Async Writes in Redux
 ===================
 
-HANDLE THESE COMMENTS IN NEXT MODULE:
+src/components/course/ManageCoursePage.js
+----
+import React, { PropTypes } from 'react';
+import { connect } from 'react-redux';
+import { bindActionCreators } from 'redux';
+import * as courseActions from '../../actions/courseActions';
+import CourseForm from './CourseForm';
+
+export class ManageCoursePage extends React.Component {
+  constructor(props, context) {
+    super(props, context);
+
+    // Setting initial LOCAL (not Redux) state
+    // Constructor specific: 'this' reference can be omitted; can change state directly, i.e. without calling this.setState()
+    this.state = {
+      course: Object.assign({}, this.props.course), // this.props.course are coming in from the component higher in hierarchy
+      errors: {}
+    };
+
+    // Need to change 'this' context of change handlers, as otherwise the 'this' context
+    // of an input element is picked, where this.state doesn't exist.
+    this.updateCourseState = this.updateCourseState.bind(this);
+    this.saveCourse = this.saveCourse.bind(this);
+  }
+
+  // This lifecycle function is invoked each time the props are updated.
+  // This way the course data still gets populated after the page refresh.
+  componentWillReceiveProps(nextProps) {
+    if (this.props.course.id != nextProps.course.id) { // sometimes React doesn't know for sure whether props have changed, so it runs this method for safety
+      // Necessary to populate form when existing course is loaded directly.
+      this.setState({ course: Object.assign({}, nextProps.course) });
+    }
+  }
+
+  // A single change handler for all our form fields
+  updateCourseState(event) {
+    const field = event.target.name;
+    let course = Object.assign({}, this.state.course); // avoiding mutating the state
+    course[field] = event.target.value;
+    return this.setState({ course: course });
+  }
+
+  saveCourse(event) {
+    event.preventDefault();
+    this.props.actions.saveCourse(this.state.course);
+    // the this.context.router was pulled in by declaring static object ManageCoursePage.contextTypes
+    this.context.router.push('/courses'); // an alternative to browserHistory.push("/courses");
+  }
+
+  render() {
+    return (
+      // Here 'authors' object is returned as a property via mapStateToProps().
+      // this.state.course and this.state.errors are both part of the LOCAL component state and have nothing to do with Redux.
+      <CourseForm
+        allAuthors={this.props.authors}
+        onChange={this.updateCourseState}
+        onSave={this.saveCourse}
+        course={this.state.course}
+        errors={this.state.errors}
+      />
+    );
+  }
+}
+
+ManageCoursePage.propTypes = {
+  course: PropTypes.object.isRequired,
+  authors: PropTypes.array.isRequired,
+  actions: PropTypes.object.isRequired
+};
+
+// Pull in the React Router context so router is available on this.context.router (used in saveCourse())
+// 'context' is a global variable that library authors use, but we as library consumers should avoid.
+ManageCoursePage.contextTypes = {
+  router: PropTypes.object
+};
+
+function getCourseById(courses, id) {
+  const course = courses.filter(course => course.id == id);
+  if (course.length) {
+    return course[0]; // since filter returns an array, have to grab the first element
+  } else {
+    return null;
+  }
+}
+
+function mapStateToProps(state, ownProps) { // 'ownProps' is a reference to our component's props
+
+  // The Redux state is passed as an argument to this funciton and we can access it.
+
+  const courseId = ownProps.params.id; // from the route path `/course/:id` at routes.js that the component itself has the access to (it is not in Redux)
+
+  let course = { id: '', watchRef: '', title: '', authorId: '', length: '', category: '' };
+  if (courseId && state.courses.length > 0) {
+    course = getCourseById(state.courses, courseId);
+  }
+
+  // We have the this.state.authors set here (populated in index.js), but the shape isn't the one we need.
+  // The SelectInput component accepts the data in value:text format, so we're formatting it here.
+  const authorsFormattedForDropdown = state.authors.map(author => {
+    return {
+      value: author.id,
+      text: author.firstName + ' ' + author.lastName
+    };
+  });
+
+  // Here we are shaping the Redux store data to be available via props to this component.
+  return {
+    course: course,
+    authors: authorsFormattedForDropdown // the Redux Store still contains the unformatted author list,
+    // but the formatted one is passed down via props over to this component
+  };
+}
+
+function mapDispatchToProps(dispatch) {
+  return {
+    actions: bindActionCreators(courseActions, dispatch)
+  };
+}
+
+export default connect(mapStateToProps, mapDispatchToProps)(ManageCoursePage);
+
+
+src/routes.js
+----
+import React from 'react';
+import { Route, IndexRoute } from 'react-router';
+import App from './components/App';
+import HomePage from './components/home/HomePage';
+import AboutPage from './components/about/AboutPage';
+import CoursesPage from './components/course/CoursesPage';
+import ManageCoursePage from './components/course/ManageCoursePage'; //eslint-disable-line import/no-named-as-default
+
+export default (
+  /* Always load the App component and then pass the nested items as "children" to the App based on the routing. */
+  <Route path="/" component={App}>
+    {/* If someone goes to /, we will load the HomePage. */}
+    <IndexRoute component={HomePage} />
+    <Route path="courses" component={CoursesPage} />
+    <Route path="course" component={ManageCoursePage} />
+    <Route path="course/:id" component={ManageCoursePage} />
+    <Route path="about" component={AboutPage} />
+  </Route>
+);
+
+
+scr/components/course/CourseForm.js
+----
+import React from 'react';
+import TextInput from '../common/TextInput';
+import SelectInput from '../common/SelectInput';
+
+const CourseForm = ({course, allAuthors, onSave, onChange, saving, errors}) => {
+  return (
+    <form>
+      <h1>Manage Course</h1>
+      <TextInput
+        name="title"
+        label="Title"
+        value={course.title}
+        onChange={onChange}
+        error={errors.title}/>
+
+      <SelectInput
+        name="authorId"
+        label="Author"
+        value={course.authorId}
+        defaultOption="Select Author"
+        options={allAuthors}
+        onChange={onChange}
+        error={errors.authorId}/>
+
+      <TextInput
+        name="category"
+        label="Category"
+        value={course.category}
+        onChange={onChange}
+        error={errors.category}/>
+
+      <TextInput
+        name="length"
+        label="Length"
+        value={course.length}
+        onChange={onChange}
+        error={errors.length}/>
+
+      <input
+        type="submit"
+        disabled={saving}
+        value={saving ? 'Saving...' : 'Save'}
+        className="btn btn-primary"
+        onClick={onSave}/>
+    </form>
+  );
+};
+
+CourseForm.propTypes = {
+  course: React.PropTypes.object.isRequired,
+  allAuthors: React.PropTypes.array,
+  onSave: React.PropTypes.func.isRequired,
+  onChange: React.PropTypes.func.isRequired,
+  saving: React.PropTypes.bool,
+  errors: React.PropTypes.object
+};
+
+export default CourseForm;
+
+
+src/components/common/TextInput.js
+----
+import React, {PropTypes} from 'react';
+
+const TextInput = ({name, label, onChange, placeholder, value, error}) => {
+  let wrapperClass = 'form-group';
+  if (error && error.length > 0) {
+    wrapperClass += " " + 'has-error';
+  }
+
+  return (
+    <div className={wrapperClass}>
+      <label htmlFor={name}>{label}</label>
+      <div className="field">
+        <input
+          type="text"
+          name={name}
+          className="form-control"
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}/>
+        {error && <div className="alert alert-danger">{error}</div>}
+      </div>
+    </div>
+  );
+};
+
+TextInput.propTypes = {
+  name: PropTypes.string.isRequired,
+  label: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired,
+  placeholder: PropTypes.string,
+  value: PropTypes.string,
+  error: PropTypes.string
+};
+
+export default TextInput;
+
+
+src/components/common/SelectInput.js
+----
+import React, {PropTypes} from 'react';
+
+const SelectInput = ({name, label, onChange, defaultOption, value, error, options}) => {
+  return (
+    <div className="form-group">
+      <label htmlFor={name}>{label}</label>
+      <div className="field">
+        {/* Note, value is set here rather than on the option - docs: https://facebook.github.io/react/docs/forms.html */}
+        <select
+          name={name}
+          value={value}
+          onChange={onChange}
+          className="form-control">
+          <option value="">{defaultOption}</option>
+          {options.map((option) => {
+            return <option key={option.value} value={option.value}>{option.text}</option>;
+          })
+          }
+        </select>
+        {error && <div className="alert alert-danger">{error}</div>}
+      </div>
+    </div>
+  );
+};
+
+SelectInput.propTypes = {
+  name: PropTypes.string.isRequired,
+  label: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired,
+  defaultOption: PropTypes.string,
+  value: PropTypes.string,
+  error: PropTypes.string,
+  options: PropTypes.arrayOf(PropTypes.object)
+};
+
+export default SelectInput;
+
+
+src/actions/authorActions.js
+----
+import AuthorApi from '../api/mockAuthorApi';
+import * as types from './actionTypes';
+
+export function loadAuthorsSuccess(authors) {
+  return {type: types.LOAD_AUTHORS_SUCCESS, authors};
+}
+
+export function loadAuthors() {
+  return dispatch => {
+    return AuthorApi.getAllAuthors().then(authors => {
+      dispatch(loadAuthorsSuccess(authors));
+    }).catch(error => {
+      throw(error);
+    });
+  };
+}
+
+
+src/actions/actionTypes.js
+----
+export const LOAD_COURSES_SUCCESS = 'LOAD_COURSES_SUCCESS';
+export const LOAD_AUTHORS_SUCCESS = 'LOAD_AUTHORS_SUCCESS';
+export const CREATE_COURSE_SUCCESS = 'CREATE_COURSE_SUCCESS';
+export const UPDATE_COURSE_SUCCESS = 'UPDATE_COURSE_SUCCESS';
+
+
+src/reducers/authorReducer.js
+----
+import * as types from '../actions/actionTypes';
+import initialState from './initialState';
+
+export default function authorReducer(state = initialState.authors, action) {
+  switch (action.type) {
+    case types.LOAD_AUTHORS_SUCCESS:
+      return action.authors;
+
+    default:
+      return state;
+  }
+}
+
+
+src/reducers/initialState.js
+----
+// These are the properties used by Reducers as a default initial state.
+// It is a mental map of how the Store data is sliced for reducers.
+export default {
+  authors: [],
+  courses: []
+};
+
 
 src/reducers/courseReducer.js
 ----
-    //case types.CREATE_COURSE:
-      // all the 'state' array elements are picked and defined here inline, which returns a new instance of 'state' array
-      // and a new array element is added to the end
-    //  return [...state, Object.assign({}, action.course)];
+import * as types from '../actions/actionTypes';
+import initialState from './initialState';
+
+export default function courseReducer(state = initialState.courses, action) { // this slice of 'state' will be an array of courses
+  switch (action.type) {
+    case types.LOAD_COURSES_SUCCESS:
+      return action.courses;
+    case types.CREATE_COURSE_SUCCESS:
+      // Since State is immutable, we can't simply change the appropriate index in the array, but we need to re-create the array instead.
+      // To achieve this we pick all the 'state' array elements via spread operator (...), add a new element to the end and return a new array.
+      return [
+        ...state,
+        Object.assign({}, action.course)
+      ];
+    case types.UPDATE_COURSE_SUCCESS:
+      // In addition, here we first filter out the course that is updated and then add the new version of it to the end of the new array.
+      return [
+        ...state.filter(course => course.id !== action.course.id),
+        Object.assign({}, action.course)
+      ];
+    default:
+      return state;
+  }
+}
+
+
+src/reducers/index.js
+----
+import {combineReducers} from 'redux';
+import courses from './courseReducer';
+import authors from './authorReducer';
+
+const rootReducer = combineReducers({
+  courses, // in ES5 this would look like courses: courses; by this name this reducer will be reachable, i.e. this.state.courses
+  authors
+});
+
+export default rootReducer;
+
+
+src/index.js
+----
+import 'babel-polyfill';
+import React from 'react';
+import { render } from 'react-dom';
+import configureStore from './store/configureStore';
+import {Provider} from 'react-redux';
+import { Router, browserHistory } from 'react-router';
+import routes from './routes';
+import {loadCourses} from './actions/courseActions';
+import {loadAuthors} from './actions/authorActions';
+import './styles/styles.css'; //Webpack can import CSS files too!
+import '../node_modules/bootstrap/dist/css/bootstrap.min.css';
+
+// If we wanted to rehydrate our store with some initial state passed down from the server, we could supply it to the configureStore()
+const store = configureStore();
+// Once the Store is configured, we can dispatch Actions against the Store
+store.dispatch(loadCourses());
+store.dispatch(loadAuthors());
+
+render(
+  <Provider store={store}>
+    <Router history={browserHistory} routes={routes} />
+  </Provider>,
+  document.getElementById('app')
+);
+
+
+src/actions/courseActions.js
+----
+import * as types from './actionTypes';
+import courseApi from '../api/mockCourseApi';
+
+export function loadCoursesSuccess(courses) {
+  return { type: types.LOAD_COURSES_SUCCESS, courses }; // in ES5 the Object declaration would look like { type: types.LOAD_COURSES_SUCCESS, courses: courses }
+}
+
+export function createCourseSuccess(course) {
+  return {type: types.CREATE_COURSE_SUCCESS, course};
+}
+
+export function updateCourseSuccess(course) {
+  return {type: types.UPDATE_COURSE_SUCCESS, course};
+}
+
+// We're making an async call to an API, so we'll want to handle the promise returned by getAllCourses() and then dispatch an action when the promise is resolved.
+export function loadCourses() { // this is our Thunk
+    return function(dispatch) { // this wrapper funciton will exist in every one of our Thunks
+      return courseApi.getAllCourses().then(courses => { // getAllCourses() returns a promise
+        dispatch(loadCoursesSuccess(courses));
+      }).catch(error => {
+        throw(error);
+      });
+    };
+}
+
+export function saveCourse(course) {
+  return function (dispatch, getState) { // The 'getState' is an optional parameter, which is useful when we need to access the Redux store to get the particular
+                                         // pieces of state without the need of passing them in as parameters. We don't need it here, since we already have the
+                                         // 'course' passed in (for getting the course.id), but this will become useful when the application grows bigger.
+    return courseApi.saveCourse(course).then(savedCourse => {
+      course.id ? dispatch(updateCourseSuccess(savedCourse)) : dispatch(createCourseSuccess(savedCourse));
+    }).catch(error => {
+      throw(error);
+    });
+  };
+}
+
 
 src/components/course/CoursesPage.js
 ----
-    // Need to change 'this' context of change handlers, as otherwise the 'this' context
-    // of an input element is picked, where this.state doesn't exist
-    //this.onTitleChange = this.onTitleChange.bind(this);
-    //this.onClickSave = this.onClickSave.bind(this);
+import React, { PropTypes } from 'react';
+import { connect } from 'react-redux';
+import { bindActionCreators } from 'redux';
+import * as courseActions from '../../actions/courseActions';
+import CourseList from './CourseList';
+import {browserHistory} from 'react-router';
+
+class CoursesPage extends React.Component {
+
+  constructor(props, context) {
+    super(props, context);
+    this.redirectToAddCoursePage = this.redirectToAddCoursePage.bind(this);
+  }
+
+  courseRow(course, index) {
+    return <div key={index}>{course.title}</div>;
+  }
+
+  redirectToAddCoursePage() {
+    browserHistory.push("/course");
+  }
+
+  render() {
+    const { courses } = this.props; // in ES5 this would look like as: var courses = this.props.courses;
+    return (
+      <div>
+        <h1>Courses</h1>
+        <input type="submit"
+          value="Add Course"
+          className="btn btn-primary"
+          onClick={this.redirectToAddCoursePage} />
+        <CourseList courses={courses} /> {/* could pass {this.props.courses} also */}
+      </div>
+    );
+  }
+}
+
+CoursesPage.propTypes = {
+  courses: PropTypes.array.isRequired,
+  actions: PropTypes.object.isRequired
+};
+
+function mapStateToProps(state, ownProps) {
+  return {
+    courses: state.courses // the name 'courses' of state depends on how the courseReducer is referenced to in rootReducer, i.e. src/reducers/index.js
+  };
+}
+
+function mapDispatchToProps(dispatch) {
+  return {
+    actions: bindActionCreators(courseActions, dispatch)
+  };
+}
+
+// connect(mapStateToProps, mapDispatchToProps) returns a function, which is invoked with CoursesPage argument
+export default connect(mapStateToProps, mapDispatchToProps)(CoursesPage);
+
+
+
+11. Async Status and Error Handling
+===================
+
+
 
 
 
 Appendix: ES6
 ===================
+
+* Constructor
+  - state can be set directly, i.e. without calling this.setState();
+  - 'this' keyword can be omitted?
 
 * 'var' is to be avoided, but 'let' and 'const' are to be used.
   'const' is more strict and doesn't allow the variable to be reassigned a different value.
