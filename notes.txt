@@ -2581,6 +2581,177 @@ render(
 
 12. Testing React
 ===================
+* Test frameworks:
+  - Mocha - highly configurable and has a large ecosystem of support.
+  - Jasmin - similar to Mocha, but the mentor finds Mocha more configurable.
+  - Jest - is from Facebook, very similar to Jasmine. It is basically a wrapper around Jasmine that adds some unique features like mocking by default.
+  - Tape - is arguably a leanest and simplest library of the bunch.
+  - AVA - new kid on the block. Uses Babel behind the scenes.
+
+  - Mocha and AVA comparison
+    Mocha (*)                               | AVA
+    ----------------------------------------+---------------------------------
+    Serial                                  | Concurrent
+    No assertions built in                  | Assertions built in
+    Uses globals                            | No globals
+    No built-in ES6 support                 | Built-in ES6 support
+    Runs all tests on save                  | Runs only impacted tests
+    Long stack trace upon error             | Short specific error with marker
+    (!) Proven, mature, with huge ecosystem | New
+
+* Assertion libraries:
+  - Chai - most popular
+  - Expect - sinmple and has a small terse API
+
+  - Chai and Expect comparison
+    Chai          | Expect (*)
+    --------------+----------------
+    to.equal      | toBe
+    to.deep.equal | toEqual
+    to.exist      | toExist
+    to.not.exist  | toNotExist
+    to.be.above   | ToBeGreaterThan
+    No spy        | Spy built in
+
+* Helper libraries:
+  - React Test Utils - made specifically to test React components; built and supported by Facebook; has a verbose API.
+    ~ shallowRender() - lets us render just the component we're testing, without rendering any of its children. No DOM is required, since shallowRender returns
+      an object that mirrors what we'd expect to see in a real DOM. We should prefer this approach when possible, because it's fast and it's simple.
+    ~ renderIntoDocument() - actually renders a component into the DOM, including the children. Browser is not necessary and libraries like JSDOM come in handy.
+      JSDOM offers a simulated DOM in Node that we can interact with just as though we're in a browser.
+    ~ findRenderedDOMComponentWithTag() - useful for finding specific DOM elements by tag.
+    ~ scryRenderedDOMComponentsWithTag() - finds components by tag name.
+    ~ simulate() - once we have a reference to a specific element, we can simulate interactions like click, keypress, form submission, scrolling, etc. on it.
+
+  - Enzyme - an abstraction over React Test Utils; uses JSDOM (in-memory DOM) and Cheerio (Fast jQuery style selectors) - https://github.com/airbnb/enzyme
+    ~ find() - ultra-versatile since it accepts a useful subset of CSS selectors, similar to jQuery.
+      It covers findRenderedDOMComponentWithTag(), scryRenderedDOMComponentsWithTag() and scryRenderedDOMComponentsWithClass().
+    ~ Has a nice large turse API, which very closely mirrors interacting with jQuery (is(selector), not(selector), children(), parents(), etc.).
+
+* 3 popular ways to run JavaScript-based tests
+  - Browser - Karma is a popular test runner for running tests in a real deal browser. This approach requires more configuration and is slower.
+  - Headless Browser - we can utilize a headless browser like Phantom JS to run our tests.
+  - In-memory DOM (*) - Enzyme uses JSDOM behind the scenes to provide an in-memory DOM. JSDOM simulates an actual browser by creating a DOM in memory that we
+    can interact with. The advantages of this approach are that it is fast, quick to set up, and allows us to just run our tests via Node.
+
+* Reasons to place test scripts alongside the file under test
+  - Easy imports, no long relative file paths involved. Always ./filenameUndertest.
+  - Clear visibility to the tests - they are right there in our src and it is easy to spot which file lacks a test..
+  - Convenient to open both at the same time.
+  - Move files and tests together when refactoring - no need to change the path to corresponding file when importing.
+
+* Shallow Render vs Render into Document
+  Shallow Render (*)                        | Render into Document
+  ------------------------------------------+-----------------------
+  Fast                                      | Slower
+  Test in isolation (children not rendered) | Test set of components
+  No refs or interactions yet               | Test refs and interactions
+  Recommended for the future                |
+
+
+package.json
+----
+...
+"scripts": {
+  ...
+  "test": "mocha --reporter spec tools/testSetup.js \"src/**/*.test.js\"",
+  ...
+}
+...
+
+
+src/components/course/CourseForm.ReactTestUtils.test.js
+----
+import expect from 'expect';
+import React from 'react';
+import TestUtils from 'react-addons-test-utils';
+import CourseForm from './CourseForm';
+
+// It is helpful to create a setup function that will return the output of rendering component under test.
+function setup(saving) {
+  let props = {
+    course: {},
+    saving: saving,
+    errors: {},
+    onSave: () => { },
+    onChange: () => { }
+  };
+
+  let renderer = TestUtils.createRenderer();
+  renderer.render(<CourseForm {...props} />);
+  let output = renderer.getRenderOutput();
+
+  return {
+    props,
+    output,
+    renderer
+  };
+}
+
+// The 'describe' block is used to group and label the tests, so we can nest multiple tests inside.
+describe('CourseForm via React Test Utils', () => {
+  it('renders form and h1', () => { // this is the actual test
+    const { output } = setup(false); // same as: const output = setup().output;
+    expect(output.type).toBe('form');
+    let [ h1 ] = output.props.children; // destructuring the array that is returned from children and say that the first element is an h1
+    expect(h1.type).toBe('h1');
+  });
+
+  it('save button is labeled "Save" when not saving', () => {
+    const { output } = setup(false);
+    const submitButton = output.props.children[5];
+    expect(submitButton.props.value).toBe('Save');
+  });
+
+  it('save button is labeled "Saving..." when saving', () => {
+    const { output } = setup(true);
+    const submitButton = output.props.children[5];
+    expect(submitButton.props.value).toBe('Saving...');
+  });
+});
+
+
+src/components.course/CourseForm.Enzyme.test.js
+----
+import expect from 'expect';
+import React from 'react';
+import { mount, shallow } from 'enzyme';
+import CourseForm from './CourseForm';
+
+function setup(saving) {
+  const props = {
+    course: {},
+    saving: saving,
+    errors: {},
+    onSave: () => { },
+    onChange: () => { }
+  };
+
+  return shallow(<CourseForm {...props} />);
+}
+
+describe('CourseForm via Enzyme', () => {
+  it('renders form and h1', () => {
+    const wrapper = setup(false);
+    expect(wrapper.find('form').length).toBe(1);
+    expect(wrapper.find('h1').text()).toEqual('Manage Course');
+  });
+
+  it('save button is labeled "Save" when not saving', () => {
+    const wrapper = setup(false);
+    expect(wrapper.find('input').props().value).toBe('Save');
+  });
+
+  it('save button is labeled "Saving..." when saving', () => {
+    const wrapper = setup(true);
+    expect(wrapper.find('input').props().value).toBe('Saving...');
+  });
+});
+
+
+
+13. Testing Redux
+===================
 
 
 
@@ -2616,4 +2787,4 @@ Appendix: ES6
 
 * Generators - functions that can be paused and resumed later. A Generator can contain multiple yield statements. At each yield, the generator will pause.
 
-* Promises -
+* Promises - .then().catch(error)
