@@ -2,5 +2,6 @@
 // It is a mental map of how the Store data is sliced for reducers.
 export default {
   authors: [],
-  courses: []
+  courses: [],
+  ajaxCallsInProgress: 0
 };

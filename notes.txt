@@ -2145,6 +2145,443 @@ export default connect(mapStateToProps, mapDispatchToProps)(CoursesPage);
 11. Async Status and Error Handling
 ===================
 
+* General concepts:
+  - Loading Dots - controlled by a 'ajaxCallsInProgress' state property from Redux Store
+    ~ Listener: App.js -> Header.js
+    ~ Issuer: courseAction.js (before API call and in case of error) -> ajaxStatusReducer.js
+  - Enabled/disabled Save button - controlled by 'saving' property of the local state in ManageCoursePage.js that is passed down to CourseForm.js
+    ~ Set to false: constructor, saveCourse(event) on failure, redirect()
+    ~ Set to true: saveCourse(event) at the start
+  - Popping (toastr) messages - ManageCoursePage.js
+    ~ Success: redirect()
+    ~ Failure: saveCourse(event) on failure
+  - Error handling: Catching promise rejections from
+    ~ courseActions.js - throwing error on API call promise reject(error)
+    ~ ManageCoursePage.js - catching promise error thrown by courseActions.js, seting 'saving' to false, pushing toastr.error(message)
+
+
+src/components/common/LoadingDots.js
+----
+import React, {PropTypes} from 'react';
+
+class LoadingDots extends React.Component {
+  constructor(props, context) {
+    super(props, context);
+
+    this.state = {frame: 1};
+  }
+
+  componentDidMount() {
+    this.interval = setInterval(() => {
+      this.setState({  // eslint-disable-line react/no-did-mount-set-state
+        frame: this.state.frame + 1
+      });
+    }, this.props.interval);
+  }
+
+  componentWillUnmount() {
+    clearInterval(this.interval);
+  }
+
+  render() {
+    let dots = this.state.frame % (this.props.dots + 1);
+    let text = '';
+    while (dots > 0) {
+      text += '.';
+      dots--;
+    }
+    return <span {...this.props}>{text}&nbsp;</span>;
+  }
+}
+
+LoadingDots.defaultProps = {
+  interval: 300, dots: 3
+};
+
+LoadingDots.propTypes = {
+  interval: PropTypes.number,
+  dots: PropTypes.number
+};
+
+export default LoadingDots;
+
+
+src/components/common/Header.js
+----
+import React, { PropTypes } from 'react';
+import { Link, IndexLink } from 'react-router';
+import LoadingDots from './LoadingDots';
+
+const Header = ({ loading }) => {
+  return (
+    <nav>
+      {/* The class value of activeClassName styles the currently selected anchor accordingly. */}
+      <IndexLink to="/" activeClassName="active">Home</IndexLink>
+      {" | "}
+      <Link to="/courses" activeClassName="active">Courses</Link>
+      {" | "}
+      <Link to="/about" activeClassName="active">About</Link>
+      {/* The trick with below is that the right-hand side of the expression is only evaluated if the left-hand side is true. */}
+      {loading && <LoadingDots interval={100} dots={20} />}
+    </nav>
+  );
+};
+
+Header.propTypes = {
+  loading: PropTypes.bool.isRequired
+};
+
+export default Header;
+
+
+src/actions/ajaxStatusActions.js
+----
+import * as types from './actionTypes';
+
+export function beginAjaxCall() {
+  return {type: types.BEGIN_AJAX_CALL};
+}
+
+export function ajaxCallError() {
+  return {type: types.AJAX_CALL_ERROR};
+}
+
+
+src/actions/actionTypes.js
+----
+export const BEGIN_AJAX_CALL = 'BEGIN_AJAX_CALL';
+export const AJAX_CALL_ERROR = 'AJAX_CALL_ERROR';
+
+export const LOAD_COURSES_SUCCESS = 'LOAD_COURSES_SUCCESS';
+export const LOAD_AUTHORS_SUCCESS = 'LOAD_AUTHORS_SUCCESS';
+export const CREATE_COURSE_SUCCESS = 'CREATE_COURSE_SUCCESS';
+export const UPDATE_COURSE_SUCCESS = 'UPDATE_COURSE_SUCCESS';
+
+
+src/reducers/initialState.js
+----
+// These are the properties used by Reducers as a default initial state.
+// It is a mental map of how the Store data is sliced for reducers.
+export default {
+  authors: [],
+  courses: [],
+  ajaxCallsInProgress: 0
+};
+
+
+src/reducers/ajaxStatusReducer.js
+----
+import * as types from '../actions/actionTypes';
+import initialState from './initialState';
+
+function actionTypeEndsInSuccess(type) {
+  return type.substring(type.length - 8) == '_SUCCESS';
+}
+
+  // Since all Reducers are invoked for all Actions - capturing each invocation here also and amending ajaxCallsInProgress property of the State
+  // based on how the API call ended.
+export default function ajaxStatusReducer(state = initialState.ajaxCallsInProgress, action) {
+  if (action.type == types.BEGIN_AJAX_CALL) {
+    return state + 1;
+  } else if (actionTypeEndsInSuccess(action.type) || action.type == types.AJAX_CALL_ERROR) {
+    return state - 1;
+  }
+
+  return state;
+}
+
+
+src/reducers/index.js
+----
+import {combineReducers} from 'redux';
+import courses from './courseReducer';
+import authors from './authorReducer';
+import ajaxCallsInProgress from './ajaxStatusReducer';
+
+const rootReducer = combineReducers({
+  courses, // in ES5 this would look like courses: courses; by this name this reducer will be reachable, i.e. this.state.courses
+  authors,
+  ajaxCallsInProgress
+});
+
+export default rootReducer;
+
+
+src/actions/courseActions.js
+----
+import * as types from './actionTypes';
+import courseApi from '../api/mockCourseApi';
+import {beginAjaxCall, ajaxCallError} from './ajaxStatusActions';
+
+export function loadCoursesSuccess(courses) {
+  return { type: types.LOAD_COURSES_SUCCESS, courses }; // in ES5 the Object declaration would look like { type: types.LOAD_COURSES_SUCCESS, courses: courses }
+}
+
+export function createCourseSuccess(course) {
+  return {type: types.CREATE_COURSE_SUCCESS, course};
+}
+
+export function updateCourseSuccess(course) {
+  return {type: types.UPDATE_COURSE_SUCCESS, course};
+}
+
+// We're making an async call to an API, so we'll want to handle the promise returned by getAllCourses() and then dispatch an action when the promise is resolved.
+// Note that in the thunk we are dispatching 2 actions that will be handled by 2 separate reducers - ajaxStatusReducer.js and courseReducer.js
+export function loadCourses() { // this is our Thunk
+    return function(dispatch) { // this wrapper funciton will exist in every one of our Thunks
+      dispatch(beginAjaxCall()); // alternatively, dispatching of this action could be moved to real API handling file
+      return courseApi.getAllCourses().then(courses => { // getAllCourses() returns a promise
+        dispatch(loadCoursesSuccess(courses));
+      }).catch(error => {
+        throw(error);
+      });
+    };
+}
+
+export function saveCourse(course) {
+  return function (dispatch, getState) { // The 'getState' is an optional parameter, which is useful when we need to access the Redux store to get the particular
+                                         // pieces of state without the need of passing them in as parameters. We don't need it here, since we already have the
+                                         // 'course' passed in (for getting the course.id), but this will become useful when the application grows bigger.
+    dispatch(beginAjaxCall());
+    return courseApi.saveCourse(course).then(savedCourse => {
+      course.id ? dispatch(updateCourseSuccess(savedCourse)) : dispatch(createCourseSuccess(savedCourse));
+    }).catch(error => {
+      dispatch(ajaxCallError(error)); // prevents loading dots
+      throw(error);
+    });
+  };
+}
+
+
+src/actions/authorActions.js
+----
+import AuthorApi from '../api/mockAuthorApi';
+import * as types from './actionTypes';
+import {beginAjaxCall} from './ajaxStatusActions';
+
+export function loadAuthorsSuccess(authors) {
+  return {type: types.LOAD_AUTHORS_SUCCESS, authors};
+}
+
+export function loadAuthors() {
+  return dispatch => {
+    dispatch(beginAjaxCall());
+    return AuthorApi.getAllAuthors().then(authors => {
+      dispatch(loadAuthorsSuccess(authors));
+    }).catch(error => {
+      throw(error);
+    });
+  };
+}
+
+
+src/components/App.js
+----
+// This component handles the App template used on every page.
+import React, {PropTypes} from 'react';
+import Header from './common/Header';
+import {connect} from 'react-redux';
+
+class App extends React.Component {
+  render() {
+    return (
+      <div className="container-fluid">
+        <Header
+          loading={this.props.loading}
+        />
+        {/* These "children" (e.g. AboutPage, HomePage, etc.) will be passed over from the react-router
+            to App component (in routes.js) and then they will be composed right here on the page. */}
+        {this.props.children}
+      </div>
+    );
+  }
+}
+
+App.propTypes = {
+  children: PropTypes.object.isRequired,
+  loading: PropTypes.bool.isRequired
+};
+
+function mapStateToProps(state, ownProps) {
+  return {
+    // 'ajaxCallsInProgress' is the property of state, but the derived value of 'loading' is passed down via props to this component onwards
+    loading: state.ajaxCallsInProgress > 0
+  };
+}
+
+export default connect(mapStateToProps)(App);
+
+
+src/components/course/ManageCoursePage.js
+----
+import React, { PropTypes } from 'react';
+import { connect } from 'react-redux';
+import { bindActionCreators } from 'redux';
+import * as courseActions from '../../actions/courseActions';
+import CourseForm from './CourseForm';
+import toastr from 'toastr';
+
+export class ManageCoursePage extends React.Component {
+  constructor(props, context) {
+    super(props, context);
+
+    // Setting initial LOCAL (not Redux) state
+    // Constructor specific: 'this' reference can be omitted; can change state directly, i.e. without calling this.setState()
+    this.state = {
+      course: Object.assign({}, this.props.course), // this.props.course are coming in from the component higher in hierarchy
+      errors: {},
+      saving: false // controls the Save button name and disabled status
+    };
+
+    // Need to change 'this' context of change handlers, as otherwise the 'this' context
+    // of an input element is picked, where this.state doesn't exist.
+    this.updateCourseState = this.updateCourseState.bind(this);
+    this.saveCourse = this.saveCourse.bind(this);
+  }
+
+  // This lifecycle function is invoked each time the props are updated.
+  // This way the course data still gets populated after the page refresh.
+  componentWillReceiveProps(nextProps) {
+    if (this.props.course.id != nextProps.course.id) { // sometimes React doesn't know for sure whether props have changed, so it runs this method for safety
+      // Necessary to populate form when existing course is loaded directly.
+      this.setState({ course: Object.assign({}, nextProps.course) });
+    }
+  }
+
+  // A single change handler for all our form fields
+  updateCourseState(event) {
+    const field = event.target.name;
+    let course = Object.assign({}, this.state.course); // avoiding mutating the state
+    course[field] = event.target.value;
+    return this.setState({ course: course });
+  }
+
+  saveCourse(event) {
+    event.preventDefault();
+    this.setState({ saving: true });
+    // In order to not redirect immediately, we use 'then' method to wait for the promise to complete first.
+    this.props.actions.saveCourse(this.state.course)
+      .then(() => this.redirect())
+      .catch(error => {
+        this.setState({ saving: false });
+        toastr.error(error);
+      });
+  }
+
+  redirect() {
+    this.setState({ saving: false });
+    toastr.success('Course saved');
+    // the this.context.router was pulled in by declaring static object ManageCoursePage.contextTypes
+    this.context.router.push('/courses'); // an alternative to browserHistory.push("/courses");
+  }
+
+  render() {
+    return (
+      // Here 'authors' object is returned as a property via mapStateToProps().
+      // this.state.course and this.state.errors are both part of the LOCAL component state and have nothing to do with Redux.
+      <CourseForm
+        allAuthors={this.props.authors}
+        onChange={this.updateCourseState}
+        onSave={this.saveCourse}
+        course={this.state.course}
+        errors={this.state.errors}
+        saving={this.state.saving}
+      />
+    );
+  }
+}
+
+ManageCoursePage.propTypes = {
+  course: PropTypes.object.isRequired,
+  authors: PropTypes.array.isRequired,
+  actions: PropTypes.object.isRequired
+};
+
+// Pull in the React Router context so router is available on this.context.router (used in saveCourse())
+// 'context' is a global variable that library authors use, but we as library consumers should avoid.
+ManageCoursePage.contextTypes = {
+  router: PropTypes.object
+};
+
+function getCourseById(courses, id) {
+  const course = courses.filter(course => course.id == id);
+  if (course.length) {
+    return course[0]; // since filter returns an array, have to grab the first element
+  } else {
+    return null;
+  }
+}
+
+function mapStateToProps(state, ownProps) { // 'ownProps' is a reference to our component's props
+
+  // The Redux state is passed as an argument to this funciton and we can access it.
+
+  const courseId = ownProps.params.id; // from the route path `/course/:id` at routes.js that the component itself has the access to (it is not in Redux)
+
+  let course = { id: '', watchRef: '', title: '', authorId: '', length: '', category: '' };
+  if (courseId && state.courses.length > 0) {
+    course = getCourseById(state.courses, courseId);
+  }
+
+  // We have the this.state.authors set here (populated in index.js), but the shape isn't the one we need.
+  // The SelectInput component accepts the data in value:text format, so we're formatting it here.
+  const authorsFormattedForDropdown = state.authors.map(author => {
+    return {
+      value: author.id,
+      text: author.firstName + ' ' + author.lastName
+    };
+  });
+
+  // Here we are shaping the Redux store data to be available via props to this component.
+  return {
+    course: course,
+    authors: authorsFormattedForDropdown // the Redux Store still contains the unformatted author list,
+    // but the formatted one is passed down via props over to this component
+  };
+}
+
+function mapDispatchToProps(dispatch) {
+  return {
+    actions: bindActionCreators(courseActions, dispatch)
+  };
+}
+
+export default connect(mapStateToProps, mapDispatchToProps)(ManageCoursePage);
+
+
+src/index.js
+----
+import 'babel-polyfill';
+import React from 'react';
+import { render } from 'react-dom';
+import configureStore from './store/configureStore';
+import {Provider} from 'react-redux';
+import { Router, browserHistory } from 'react-router';
+import routes from './routes';
+import {loadCourses} from './actions/courseActions';
+import {loadAuthors} from './actions/authorActions';
+import './styles/styles.css'; //Webpack can import CSS files too!
+import '../node_modules/bootstrap/dist/css/bootstrap.min.css';
+import '../node_modules/toastr/build/toastr.min.css';
+
+// If we wanted to rehydrate our store with some initial state passed down from the server, we could supply it to the configureStore()
+const store = configureStore();
+// Once the Store is configured, we can dispatch Actions against the Store
+store.dispatch(loadCourses());
+store.dispatch(loadAuthors());
+
+render(
+  <Provider store={store}>
+    <Router history={browserHistory} routes={routes} />
+  </Provider>,
+  document.getElementById('app')
+);
+
+
+
+12. Testing React
+===================
+
 
 
 

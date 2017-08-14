@@ -3,6 +3,7 @@ import { connect } from 'react-redux';
 import { bindActionCreators } from 'redux';
 import * as courseActions from '../../actions/courseActions';
 import CourseForm from './CourseForm';
+import toastr from 'toastr';
 
 export class ManageCoursePage extends React.Component {
   constructor(props, context) {
@@ -12,7 +13,8 @@ export class ManageCoursePage extends React.Component {
     // Constructor specific: 'this' reference can be omitted; can change state directly, i.e. without calling this.setState()
     this.state = {
       course: Object.assign({}, this.props.course), // this.props.course are coming in from the component higher in hierarchy
-      errors: {}
+      errors: {},
+      saving: false // controls the Save button name and disabled status
     };
 
     // Need to change 'this' context of change handlers, as otherwise the 'this' context
@@ -40,7 +42,19 @@ export class ManageCoursePage extends React.Component {
 
   saveCourse(event) {
     event.preventDefault();
-    this.props.actions.saveCourse(this.state.course);
+    this.setState({ saving: true });
+    // In order to not redirect immediately, we use 'then' method to wait for the promise to complete first.
+    this.props.actions.saveCourse(this.state.course)
+      .then(() => this.redirect())
+      .catch(error => {
+        this.setState({ saving: false });
+        toastr.error(error);
+      });
+  }
+
+  redirect() {
+    this.setState({ saving: false });
+    toastr.success('Course saved');
     // the this.context.router was pulled in by declaring static object ManageCoursePage.contextTypes
     this.context.router.push('/courses'); // an alternative to browserHistory.push("/courses");
   }
@@ -55,6 +69,7 @@ export class ManageCoursePage extends React.Component {
         onSave={this.saveCourse}
         course={this.state.course}
         errors={this.state.errors}
+        saving={this.state.saving}
       />
     );
   }
