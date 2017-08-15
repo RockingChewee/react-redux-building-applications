@@ -3144,8 +3144,280 @@ describe('Store', function() {
 
 14. Production Builds
 ===================
+* Development and Production builds
+  - Our development process doesn't generate any actual physical files. Everything's being served by Webpack, which just reads the files in the src
+    directory and serves the process files from memory. For Production we need to write real physical files to the file system.
+  - Folders:
+    ~ /src - holds the source code
+    ~ /dist - holds the production build
+  - A goal for production build (/dist folder) is to bundle the entire application into these 3 files:
+    ~ bundle.js - minified and budled JS file
+    ~ styles.css - minified and bundled CSS file
+    ~ index.html - an html file that references both of the above
+    ~ sourcemap file - corresponding to the JS file and CSS file since we're going to minify both of these.
+
+* Automated production build process we're going to implement
+  - Lints and runs tests
+  - Bundle and minify JS and CSS
+  - Generate JS and CSS sourcemaps for debugging of production issues
+  - Exclude dev-specific concerns, e.g. hot-reloading
+  - Build React in production mode, i.e. with PropType validation disabled, etc.
+  - Open prod build in browser
+
+* After the proper production build was configured, the network traffic dropped from 4.8 MB to 121 KB!
 
 
+src/store/configureStore.dev.js
+----
+import {createStore, applyMiddleware} from 'redux';
+import rootReducer from '../reducers';
+import reduxImmutableStateInvariant from 'redux-immutable-state-invariant'; // enforces immutability
+import thunk from 'redux-thunk'; // handles async API calls by using a wrapping the Action object into a funciton in src/actions/courseActions.js
+
+export default function configureStore(initialState) {
+  return createStore(
+    rootReducer,
+    initialState,
+    applyMiddleware(thunk, reduxImmutableStateInvariant())
+  );
+}
+
+
+src/store/configureStore.prod.js
+----
+import {createStore, applyMiddleware} from 'redux';
+import rootReducer from '../reducers';
+import thunk from 'redux-thunk'; // handles async API calls by using a wrapping the Action object into a funciton in src/actions/courseActions.js
+
+export default function configureStore(initialState) {
+  return createStore(
+    rootReducer,
+    initialState,
+    applyMiddleware(thunk)
+  );
+}
+
+
+src/store/configureStore.js
+----
+if (process.env.NODE_ENV === 'production') {
+  // Dynamic imports aren't supported by ES6, so using 'require' instead of 'import'.
+  module.exports = require('./configureStore.prod');
+} else {
+  module.exports = require('./configureStore.dev');
+}
+
+
+src/index.js
+----
+/* eslint-disable import/default */ // this way ESLint won't complain about us using a file that doesn't have a default export (src/store/configureStore.js)
+import 'babel-polyfill';
+import React from 'react';
+import { render } from 'react-dom';
+import configureStore from './store/configureStore';
+import {Provider} from 'react-redux';
+import { Router, browserHistory } from 'react-router';
+import routes from './routes';
+import {loadCourses} from './actions/courseActions';
+import {loadAuthors} from './actions/authorActions';
+import './styles/styles.css'; //Webpack can import CSS files too!
+import '../node_modules/bootstrap/dist/css/bootstrap.min.css';
+import '../node_modules/toastr/build/toastr.min.css';
+
+// If we wanted to rehydrate our store with some initial state passed down from the server, we could supply it to the configureStore()
+const store = configureStore();
+// Once the Store is configured, we can dispatch Actions against the Store
+store.dispatch(loadCourses());
+store.dispatch(loadAuthors());
+
+render(
+  <Provider store={store}>
+    <Router history={browserHistory} routes={routes} />
+  </Provider>,
+  document.getElementById('app')
+);
+
+
+webpack.config.prod.js
+----
+import webpack from 'webpack';
+import path from 'path';
+import ExtractTextPlugin from 'extract-text-webpack-plugin';
+
+// PROD: Defining a Node environment variable (NODE_ENV) that sets React for production.
+const GLOBALS = {
+  'process.env.NODE_ENV': JSON.stringify('production')
+};
+
+export default {
+  debug: true,
+  devtool: 'source-map', // PROD: changing from the inline-source-map
+  noInfo: false,
+  entry: path.resolve(__dirname, 'src/index'), // PROD: removing entry points for hot-reloading
+  target: 'web',
+  output: {
+    path: __dirname + '/dist', // Note: Physical files are only output by the production build task `npm run build`.
+    publicPath: '/',
+    filename: 'bundle.js'
+  },
+  devServer: {
+    contentBase: path.resolve(__dirname, 'dist') // PROD: changing from 'src' to 'dist'
+  },
+  plugins: [ // PROD: removing references to both HotModuleReplacementPlugin() and NoErrorsPlugin() plugins, and added the following
+    // OccurenceOrderPlugin - Optimizes the order that our files are bundled in for optimal minification.
+    new webpack.optimize.OccurenceOrderPlugin(),
+    // DefinePlugin - Lets us define variables that are then made available to the libraries that Webpack is bundling, e.g. GLOBALS variable for React.
+    new webpack.DefinePlugin(GLOBALS),
+    // ExtractTextPlugin - Lets us extract CSS to a separate file, instead of bundling it together with JavaScript.
+    new ExtractTextPlugin('styles.css'),
+    // DedupePlugin - Eliminates duplicate packages that helps keeping the size of the bundle as small as possible.
+    new webpack.optimize.DedupePlugin(),
+    // UglifyJsPlugin - Minifies the JavaScript file.
+    new webpack.optimize.UglifyJsPlugin()
+  ],
+  module: {
+    loaders: [
+      { test: /\.js$/, include: path.join(__dirname, 'src'), loaders: ['babel'] },
+      // PROD: since we want to extract our CSS to a separate file, we're using ExtractTextPlugin here.
+      // It accepts file type (css) and a query string parameter (sourceMap) tells it to generate a source-map as well.
+      { test: /(\.css)$/, loader: ExtractTextPlugin.extract("css?sourceMap") }, // we could tell webpack to handle SaaS and LESS files here also
+      { test: /\.eot(\?v=\d+\.\d+\.\d+)?$/, loader: 'file' }, // the following 4 instructions are necessary for the file types Bootstrap utilizes for fonts
+      { test: /\.(woff|woff2)$/, loader: 'url?prefix=font/&limit=5000' },
+      { test: /\.ttf(\?v=\d+\.\d+\.\d+)?$/, loader: 'url?limit=10000&mimetype=application/octet-stream' },
+      { test: /\.svg(\?v=\d+\.\d+\.\d+)?$/, loader: 'url?limit=10000&mimetype=image/svg+xml' }
+    ]
+  }
+};
+
+
+tools/build.js - performs the actual bundling via Webpack. This is needed only for produciton, since for development the Webpack is used as a middleware.
+----
+// More info on Webpack's Node API here: https://webpack.github.io/docs/node.js-api.html
+// Allowing console calls below since this is a build file.
+/*eslint-disable no-console */
+import webpack from 'webpack';
+import webpackConfig from '../webpack.config.prod';
+import colors from 'colors';
+
+process.env.NODE_ENV = 'production'; // this assures the Babel dev config (for hot reloading) doesn't apply.
+
+console.log('Generating minified bundle for production via Webpack. This will take a moment...'.blue);
+
+// This is just running Webpack in produciton mode and display the results in a console.
+webpack(webpackConfig).run((err, stats) => {
+  if (err) { // so a fatal error occurred. Stop here.
+    console.log(err.bold.red);
+    return 1;
+  }
+
+  const jsonStats = stats.toJson();
+
+  if (jsonStats.hasErrors) {
+    return jsonStats.errors.map(error => console.log(error.red));
+  }
+
+  if (jsonStats.hasWarnings) {
+    console.log('Webpack generated the following warnings: '.bold.yellow);
+    jsonStats.warnings.map(warning => console.log(warning.yellow));
+  }
+
+  console.log(`Webpack stats: ${stats}`);
+
+  // if we got this far, the build succeeded.
+  console.log('Your app has been compiled in production mode and written to /dist. It\'s ready to roll!'.green);
+
+  return 0;
+});
+
+
+tools/buildHtml.js - takes existing index.html from /src, parses it, modifies it and copies over to /dist
+----
+// This script copies src/index.html into /dist/index.html
+// This is a good example of using Node and cheerio to do a simple file transformation.
+// In this case, the transformation is useful since we only use a separate css file in prod.
+import fs from 'fs';
+import cheerio from 'cheerio';
+import colors from 'colors';
+
+/*eslint-disable no-console */
+
+fs.readFile('src/index.html', 'utf8', (err, markup) => {
+  if (err) {
+    return console.log(err);
+  }
+
+  // Here Cheerio creates a handy in-memory DOM that we can query using simple jQuery selectors
+  const $ = cheerio.load(markup);
+
+  // since a separate spreadsheet is only utilized for the production build, need to dynamically add this here.
+  $('head').prepend('<link rel="stylesheet" href="styles.css">');
+
+  fs.writeFile('dist/index.html', $.html(), 'utf8', function (err) {
+    if (err) {
+      return console.log(err);
+    }
+    console.log('index.html written to /dist'.green);
+  });
+});
+
+
+tools/distServer.js
+----
+import express from 'express';
+import path from 'path';
+import open from 'open';
+import compression from 'compression';
+
+/*eslint-disable no-console */
+
+// Here in distServer.js file we are NOT using Webpack as a middleware, since the build was created via build.js and we only need to host it.
+
+const port = 3000;
+const app = express();
+
+app.use(compression());
+app.use(express.static('dist')); // PROD: we are serving plain static files
+
+app.get('*', function(req, res) {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
+app.listen(port, function(err) {
+  if (err) {
+    console.log(err);
+  } else {
+    open(`http://localhost:${port}`);
+  }
+});
+
+
+package.json
+----
+...
+scripts: {
+  ...
+  "clean-dist": "npm run remove-dist && mkdir dist",
+  "remove-dist": "node_modules/.bin/rimraf ./dist",
+  "build:html": "babel-node tools/buildHtml.js",
+  "prebuild": "npm-run-all clean-dist test lint build:html",
+  "build": "babel-node tools/build.js",
+  "postbuild": "babel-node tools/distServer.js"
+}
+...
+
+
+
+Appendix: Challenges
+===================
+* Implement Author Administration. Be sure to add some logic that makes sure we can't delete an author who already has a course.
+* Add functionality to Delete a course.
+* Hide empty course list.
+* Unsaved changes message, if one tries to leave ManageCourseForm having unsaved changes.
+* Enhance ManageCourseForm client-side validation to validate things like category and the link.
+* Handle 404 on the ManageCoursePage. Hint: going to need to add some logic to mapStateToProps.
+* Show a number of courses in the header.
+* Sort course table by title automatically by default. Hint: mapStateToProps is the place to get this done.
+* Revert abandoned changes, if the user navigates away from ManageCourseForm and then comes back.
 
 
 

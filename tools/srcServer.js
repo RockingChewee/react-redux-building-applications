@@ -6,6 +6,9 @@ import open from 'open';
 
 /* eslint-disable no-console */
 
+// Here in srcServer.js file we are using Webpack as a middleware for Express server for seamless bundling.
+// In distServer.js we don't use it, since we build the application via build.js and using the server only for hosting the build.
+
 const port = 3000;
 const app = express(); // creating instance of express
 const compiler = webpack(config); // getting a compiled webpack config
