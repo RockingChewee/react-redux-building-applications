@@ -2621,7 +2621,8 @@ render(
       JSDOM offers a simulated DOM in Node that we can interact with just as though we're in a browser.
     ~ findRenderedDOMComponentWithTag() - useful for finding specific DOM elements by tag.
     ~ scryRenderedDOMComponentsWithTag() - finds components by tag name.
-    ~ simulate() - once we have a reference to a specific element, we can simulate interactions like click, keypress, form submission, scrolling, etc. on it.
+    ~ simulate() - once we have a reference to a specific element, we can simulate any event that React understands, i.e. interactions like click, keypress,
+      form submission, scrolling, etc. on it.
 
   - Enzyme - an abstraction over React Test Utils; uses JSDOM (in-memory DOM) and Cheerio (Fast jQuery style selectors) - https://github.com/airbnb/enzyme
     ~ find() - ultra-versatile since it accepts a useful subset of CSS selectors, similar to jQuery.
@@ -2752,6 +2753,397 @@ describe('CourseForm via Enzyme', () => {
 
 13. Testing Redux
 ===================
+* We'll test:
+  - React components that are connected to Redux - src/components/course/ManageCoursePage.test.js, src/selectors/selectors.test.js
+  - All the discrete pieces of Redux:
+    ~ Action creators - src/actions/courseActions.test.js
+    ~ Thunks - src/actions/courseActions.test.js
+      In order to test Thunks we need to mock the Store (redux-mock-store) and HTTP calls (nock).
+    ~ Reducers - src/reducers/courseReducer.test.js
+      It is possible to automatically generate reducer tests via https://github.com/conorhastings/redux-test-recorder.
+    ~ Store - src/store/store.test.js
+      This is more Integration test than Unit test. This test covers Action -> Reducers -> Store flow.
+
+* 2 core concerns when testing React components:
+  - Test markup - given a certain set of props, do we get the expected output? Usually for presentation components.
+  - Test behavior - given a click, scroll, drag, change, do we get the expected behavior? Usually for container components.
+
+* Testing container components:
+  - The trick is that they are wrapped in a call to connect() and connect() assumes that app is wrapped in Provider component.
+    So the container component don't export the component we wrote. Instead, they export the component wrapped in a call to connect().
+  - 2 approaches to deal with the above:
+    ~ Wrap the container component with React-Redux Provider component within the test and reference the actual store:
+      <Provider store={store}><MyComponent /></Provider>
+      Advantage: we can create a custom Store for the test, so is useful if we want to test the Redux-related portions of the component.
+    ~ Add named export for the unconnected plain version of the component.
+      This is useful if we merely interested in testing the component's rendering and local state-related behaviors.
+
+
+src/components/course/ManageCoursePage.test.js
+----
+import React from 'react';
+import expect from 'expect';
+import { mount, shallow } from 'enzyme';
+import { ManageCoursePage } from './ManageCoursePage';
+
+describe('Manage Course Page', () => {
+  it('sets error message when trying to save empty title', () => {
+    const props = {
+      authors: [],
+      actions: { saveCourse: () => { return Promise.resolve(); } },
+      course: { id: '', watchRef: '', title: '', authorId: '', length: '', category: '' }
+    };
+    // Note, that we're using mount() here and not shallow(), since we need full DOM created in memory, not only one level deep.
+    const wrapper = mount(<ManageCoursePage {...props} />);
+    const saveButton = wrapper.find('input').last();
+    expect(saveButton.prop('type')).toBe('submit');
+    saveButton.simulate('click');
+    expect(wrapper.state().errors.title).toBe('Title must be at least 5 characters.');
+  });
+});
+
+
+src/components/course/ManageCoursePage.js
+----
+import React, { PropTypes } from 'react';
+import { connect } from 'react-redux';
+import { bindActionCreators } from 'redux';
+import * as courseActions from '../../actions/courseActions';
+import CourseForm from './CourseForm';
+import {authorsFormattedForDropdown} from '../../selectors/selectors';
+import toastr from 'toastr';
+
+// The only place this named export is used is for testing at ManageCoursePage.test.js
+export class ManageCoursePage extends React.Component {
+  constructor(props, context) {
+    super(props, context);
+
+    // Setting initial LOCAL (not Redux) state
+    // Constructor specific: 'this' reference can be omitted; can change state directly, i.e. without calling this.setState()
+    this.state = {
+      course: Object.assign({}, this.props.course), // this.props.course are coming in from the component higher in hierarchy
+      errors: {},
+      saving: false // controls the Save button name and disabled status
+    };
+
+    // Need to change 'this' context of change handlers, as otherwise the 'this' context
+    // of an input element is picked, where this.state doesn't exist.
+    this.updateCourseState = this.updateCourseState.bind(this);
+    this.saveCourse = this.saveCourse.bind(this);
+  }
+
+  // This lifecycle function is invoked each time the props are updated.
+  // This way the course data still gets populated after the page refresh.
+  componentWillReceiveProps(nextProps) {
+    if (this.props.course.id != nextProps.course.id) { // sometimes React doesn't know for sure whether props have changed, so it runs this method for safety
+      // Necessary to populate form when existing course is loaded directly.
+      this.setState({ course: Object.assign({}, nextProps.course) });
+    }
+  }
+
+  // A single change handler for all our form fields
+  updateCourseState(event) {
+    const field = event.target.name;
+    let course = Object.assign({}, this.state.course); // avoiding mutating the state
+    course[field] = event.target.value;
+    return this.setState({ course: course });
+  }
+
+  courseFormIsValid() {
+    let formIsValid = true;
+    let errors = {};
+
+    if (this.state.course.title.length < 5) {
+      errors.title = 'Title must be at least 5 characters.';
+      formIsValid = false;
+    }
+
+    this.setState({errors: errors});
+    return formIsValid;
+  }
+
+  saveCourse(event) {
+    event.preventDefault();
+
+    if (!this.courseFormIsValid()) {
+      return;
+    }
+
+    this.setState({ saving: true });
+    // In order to not redirect immediately, we use 'then' method to wait for the promise to complete first.
+    this.props.actions.saveCourse(this.state.course)
+      .then(() => this.redirect())
+      .catch(error => {
+        this.setState({ saving: false });
+        toastr.error(error);
+      });
+  }
+
+  redirect() {
+    this.setState({ saving: false });
+    toastr.success('Course saved');
+    // the this.context.router was pulled in by declaring static object ManageCoursePage.contextTypes
+    this.context.router.push('/courses'); // an alternative to browserHistory.push("/courses");
+  }
+
+  render() {
+    return (
+      // Here 'authors' object is returned as a property via mapStateToProps().
+      // this.state.course and this.state.errors are both part of the LOCAL component state and have nothing to do with Redux.
+      <CourseForm
+        allAuthors={this.props.authors}
+        onChange={this.updateCourseState}
+        onSave={this.saveCourse}
+        course={this.state.course}
+        errors={this.state.errors}
+        saving={this.state.saving}
+      />
+    );
+  }
+}
+
+ManageCoursePage.propTypes = {
+  course: PropTypes.object.isRequired,
+  authors: PropTypes.array.isRequired,
+  actions: PropTypes.object.isRequired
+};
+
+// Pull in the React Router context so router is available on this.context.router (used in saveCourse())
+// 'context' is a global variable that library authors use, but we as library consumers should avoid.
+ManageCoursePage.contextTypes = {
+  router: PropTypes.object
+};
+
+function getCourseById(courses, id) {
+  const course = courses.filter(course => course.id == id);
+  if (course.length) {
+    return course[0]; // since filter returns an array, have to grab the first element
+  } else {
+    return null;
+  }
+}
+
+function mapStateToProps(state, ownProps) { // 'ownProps' is a reference to our component's props
+
+  // The Redux state is passed as an argument to this funciton and we can access it.
+
+  const courseId = ownProps.params.id; // from the route path `/course/:id` at routes.js that the component itself has the access to (it is not in Redux)
+
+  let course = { id: '', watchRef: '', title: '', authorId: '', length: '', category: '' };
+  if (courseId && state.courses.length > 0) {
+    course = getCourseById(state.courses, courseId);
+  }
+
+  // Here we are shaping the Redux store data to be available via props to this component.
+  return {
+    course: course,
+    // We have the this.state.authors set here (populated in index.js), but the shape isn't the one we need.
+    // The SelectInput component accepts the data in value:text format, so we're formatting it here.
+    // The Redux Store still contains the unformatted author list, but the formatted one is passed down via props over to this component.
+    authors: authorsFormattedForDropdown(state.authors)
+  };
+}
+
+function mapDispatchToProps(dispatch) {
+  return {
+    actions: bindActionCreators(courseActions, dispatch)
+  };
+}
+
+export default connect(mapStateToProps, mapDispatchToProps)(ManageCoursePage);
+
+
+src/selectors/selectors.js
+----
+export function authorsFormattedForDropdown(authors) {
+  return authors.map(author => {
+    return {
+      value: author.id,
+      text: author.firstName + ' ' + author.lastName
+    };
+  });
+}
+
+
+src/selectors/selectors.test.js
+----
+import expect from 'expect';
+import {authorsFormattedForDropdown} from './selectors';
+
+describe('Author Selectors', () => {
+  describe('authorsFormattedForDropdown', () => {
+    it('should return author data formatted for use in a dropdown', () => {
+      const authors = [
+        {id: 'cory-house', firstName: 'Cory', lastName: 'House'},
+        {id: 'scott-allen',firstName: 'Scott',lastName: 'Allen'}
+      ];
+
+      const expected = [
+        {value: 'cory-house', text: 'Cory House'},
+        {value: 'scott-allen', text: 'Scott Allen'}
+      ];
+
+      expect(authorsFormattedForDropdown(authors)).toEqual(expected);
+    });
+  });
+});
+
+
+src/actions/courseActions.test.js
+----
+import expect from 'expect';
+import * as courseActions from './courseActions';
+import * as types from './actionTypes';
+
+// Additional imports for Thunk testing
+import thunk from 'redux-thunk';
+import nock from 'nock';
+import configureMockStore from 'redux-mock-store';
+
+// Test a sync action
+describe('Course Actions', () => {
+  describe('createCourseSuccess', () => {
+    it('should create a CREATE_COURSE_SUCCESS action', () => {
+      //arrange
+      const course = {id: 'clean-code', title: 'Clean Code'};
+      const expectedAction = {
+        type: types.CREATE_COURSE_SUCCESS,
+        course: course
+      };
+
+      //act
+      const action = courseActions.createCourseSuccess(course);
+
+      //assert
+      expect(action).toEqual(expectedAction);
+    });
+  });
+});
+
+// Testing Thunk
+
+const middleware = [thunk];
+const mockStore = configureMockStore(middleware);
+
+describe('Async Actions', () => {
+
+  // Performs a cleanup after each of our tests is run.
+  afterEach(() => {
+    nock.cleanAll();
+  });
+
+  // Note that we pass a callback function called done() to Mocha, which invokes it when the async work is complete.
+  it('should create BEGIN_AJAX_CALL and LOAD_COURSES_SUCCESS when loading courses', (done) => {
+    // Here's an example call to nock. We don't need it for this test, since we're just using mock API here.
+    // nock('http://example.com/')
+    //   .get('/courses')
+    //   .reply(200, { body: { course: [{ id: 1, firstName: 'Cory', lastName: 'House'}] }});
+
+    const expectedActions = [
+      {type: types.BEGIN_AJAX_CALL},
+      {type: types.LOAD_COURSES_SUCCESS, body: {courses: [{id: 'clean-code', title: 'Clean Code'}]}}
+    ];
+
+    const store = mockStore({courses: []}, expectedActions, done);
+    // The mock API is invoked here with the delay specified in src/api/delay.js
+    store.dispatch(courseActions.loadCourses()).then(() => {
+      // store.getActions() contains a history of processed actions?
+      const actions = store.getActions();
+      expect(actions[0].type).toEqual(types.BEGIN_AJAX_CALL);
+      expect(actions[1].type).toEqual(types.LOAD_COURSES_SUCCESS);
+      // Callback passed in to this test to tell Mocha the async work is complete.
+      done();
+    });
+  });
+});
+
+
+src/reducers/courseReducer.test.js
+----
+import expect from 'expect';
+import courseReducer from './courseReducer';
+import * as actions from '../actions/courseActions';
+
+describe('Course Reducer', () => {
+  it('should add course when passed CREATE_COURSE_SUCCESS', () => {
+    // arrange
+    const initialState = [
+      {title: 'A'},
+      {title: 'B'}
+    ];
+
+    const newCourse = {title: 'C'};
+
+    const action = actions.createCourseSuccess(newCourse);
+
+    //act
+    const newState = courseReducer(initialState, action);
+
+    //assert
+    expect(newState.length).toEqual(3);
+    expect(newState[0].title).toEqual('A');
+    expect(newState[1].title).toEqual('B');
+    expect(newState[2].title).toEqual('C');
+  });
+
+  it('should update course when passed UPDATE_COURSE_SUCCESS', () => {
+    // arrange
+    const initialState = [
+      {id: 'A', title: 'A'},
+      {id: 'B', title: 'B'},
+      {id: 'C', title: 'C'}
+    ];
+
+    const course = {id: 'B', title: 'New Title'};
+    const action = actions.updateCourseSuccess(course);
+
+    // act
+    const newState = courseReducer(initialState, action);
+    const updatedCourse = newState.find(a => a.id == course.id);
+    const untouchedCourse = newState.find(a => a.id == 'A');
+
+    // assert
+    expect(updatedCourse.title).toEqual('New Title');
+    expect(untouchedCourse.title).toEqual('A');
+    expect(newState.length).toEqual(3);
+  });
+});
+
+
+src/store/store.test.js
+----
+import expect from 'expect';
+import { createStore } from 'redux';
+import rootReducer from '../reducers';
+import initialState from '../reducers/initialState';
+import * as courseActions from '../actions/courseActions';
+
+describe('Store', function() {
+  it('Should handle creating courses', function() {
+    // arrange
+    const store = createStore(rootReducer, initialState);
+    const course = {
+      title: "Clean Code"
+    };
+
+    // act
+    const action = courseActions.createCourseSuccess(course);
+    store.dispatch(action);
+
+    // assert
+    const actual = store.getState().courses[0];
+    const expected = {
+      title: "Clean Code"
+    };
+
+    expect(actual).toEqual(expected);
+  });
+});
+
+
+
+14. Production Builds
+===================
 
 
 
@@ -2788,3 +3180,5 @@ Appendix: ES6
 * Generators - functions that can be paused and resumed later. A Generator can contain multiple yield statements. At each yield, the generator will pause.
 
 * Promises - .then().catch(error)
+
+* Object.find, e.g. const updatedCourse = newState.find(a => a.id == course.id);

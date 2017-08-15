@@ -3,8 +3,10 @@ import { connect } from 'react-redux';
 import { bindActionCreators } from 'redux';
 import * as courseActions from '../../actions/courseActions';
 import CourseForm from './CourseForm';
+import {authorsFormattedForDropdown} from '../../selectors/selectors';
 import toastr from 'toastr';
 
+// The only place this named export is used is for testing at ManageCoursePage.test.js
 export class ManageCoursePage extends React.Component {
   constructor(props, context) {
     super(props, context);
@@ -40,8 +42,26 @@ export class ManageCoursePage extends React.Component {
     return this.setState({ course: course });
   }
 
+  courseFormIsValid() {
+    let formIsValid = true;
+    let errors = {};
+
+    if (this.state.course.title.length < 5) {
+      errors.title = 'Title must be at least 5 characters.';
+      formIsValid = false;
+    }
+
+    this.setState({errors: errors});
+    return formIsValid;
+  }
+
   saveCourse(event) {
     event.preventDefault();
+
+    if (!this.courseFormIsValid()) {
+      return;
+    }
+
     this.setState({ saving: true });
     // In order to not redirect immediately, we use 'then' method to wait for the promise to complete first.
     this.props.actions.saveCourse(this.state.course)
@@ -107,20 +127,13 @@ function mapStateToProps(state, ownProps) { // 'ownProps' is a reference to our 
     course = getCourseById(state.courses, courseId);
   }
 
-  // We have the this.state.authors set here (populated in index.js), but the shape isn't the one we need.
-  // The SelectInput component accepts the data in value:text format, so we're formatting it here.
-  const authorsFormattedForDropdown = state.authors.map(author => {
-    return {
-      value: author.id,
-      text: author.firstName + ' ' + author.lastName
-    };
-  });
-
   // Here we are shaping the Redux store data to be available via props to this component.
   return {
     course: course,
-    authors: authorsFormattedForDropdown // the Redux Store still contains the unformatted author list,
-    // but the formatted one is passed down via props over to this component
+    // We have the this.state.authors set here (populated in index.js), but the shape isn't the one we need.
+    // The SelectInput component accepts the data in value:text format, so we're formatting it here.
+    // The Redux Store still contains the unformatted author list, but the formatted one is passed down via props over to this component.
+    authors: authorsFormattedForDropdown(state.authors)
   };
 }
 
