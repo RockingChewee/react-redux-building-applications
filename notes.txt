@@ -239,7 +239,7 @@ package.json
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/RockingChewee/react-redux-building-applications"
+    "url": "https://github.com/aleksf0/react-redux-building-applications"
   }
 }
 
