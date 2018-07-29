@@ -1,5 +1,5 @@
 /* eslint-disable import/default */ // this way ESLint won't complain about us using a file that doesn't have a default export (src/store/configureStore.js)
-import 'babel-polyfill';
+import 'babel-polyfill'; // has to be included after {AppContainer} (or {Provider}?), otherwise - warnings in console
 import React from 'react';
 import { render } from 'react-dom';
 import configureStore from './store/configureStore';

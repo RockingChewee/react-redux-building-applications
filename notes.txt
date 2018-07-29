@@ -509,6 +509,9 @@ describe('Our first test', () => {
   - Use React stateless functional components:
     ~ Everywhere else.
 
+!!!Note: Stateless functional components keeps re-rendering on each event even though their propeties didn't change. To get around that the
+         'recompose' can be used instead of React.Component - https://www.sitepoint.com/optimizing-react-performance-stateless-components/
+
 * Container vs Presentational components:
   - Container components (also known as Smart, Stateful, Controller View):
     ~ have most of the smarts and least of the markup. These components can be thought of as a back-end for the front-end.
